@@ -160,7 +160,7 @@ export default function CitizensAssemblyPage() {
             <figure className="space-y-2 pt-1">
               <div className="relative aspect-[16/10] w-full overflow-hidden rounded-md border border-[#E5E7EB] bg-[#F9FAFB]">
                 <Image
-                  src="/c40/c40-photo1.png"
+                  src="/ca/ca-foto-utama.png"
                   alt="Sixty Jakarta residents gathered to turn lived experience into public-housing recommendations"
                   fill
                   priority
@@ -364,7 +364,7 @@ export default function CitizensAssemblyPage() {
             <figure className="space-y-2 py-2">
               <div className="relative aspect-[16/10] w-full overflow-hidden rounded-md border border-[#E5E7EB] bg-[#F9FAFB]">
                 <Image
-                  src="/c40/c40-photo4.png"
+                  src="/ca/ca-foto2.png"
                   alt="Think Policy facilitator and government representatives engaging in open dialogue with citizen jurors"
                   fill
                   className="object-cover"

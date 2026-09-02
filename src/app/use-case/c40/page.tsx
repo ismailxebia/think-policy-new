@@ -646,7 +646,7 @@ export default function C40UseCasePage() {
                 <article>
                   <div className="relative aspect-[16/10] w-full overflow-hidden rounded-md border border-[#E5E7EB] bg-[#F9FAFB]">
                     <Image
-                      src="/c40/c40-photo1.png"
+                      src="/ca/ca-foto-utama.png"
                       alt="Mending Runding: Jakarta’s First Citizens’ Assembly on Public Housing"
                       fill
                       className="object-cover group-hover:scale-105 transition-transform duration-300"
