@@ -1,26 +1,42 @@
 @import "tailwindcss";
 
+@font-face {
+  font-family: "IowanOldSt BT";
+  src: url("/Bitstream_Iowan_Old_Style_BT.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: #18181b;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --font-sans: var(--font-inter), "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-inter: var(--font-inter), "Inter", sans-serif;
+  --font-manrope: var(--font-manrope), "Manrope", sans-serif;
+  --font-serif: "IowanOldSt BT", var(--font-iowan), Georgia, Cambria, serif;
+  --font-iowan: "IowanOldSt BT", var(--font-iowan), Georgia, Cambria, serif;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-inter), "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.font-iowan {
+  font-family: "IowanOldSt BT", var(--font-iowan), Georgia, serif;
+}
+
+.font-manrope {
+  font-family: var(--font-manrope), "Manrope", sans-serif;
+}
+
+.font-inter {
+  font-family: var(--font-inter), "Inter", sans-serif;
 }
