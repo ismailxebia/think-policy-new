@@ -24,6 +24,14 @@ const iowanOldStyle = localFont({
 export const metadata: Metadata = {
   title: "Building a more inclusive climate governance that works for everyone in Jakarta | Think Policy",
   description: "Climate change does not affect everyone equally. Low-income communities, informal workers, women, older people, and persons with disabilities often face the greatest risks while having the least influence over climate decision-making.",
+  icons: {
+    icon: [
+      { url: "/logo-symbol.svg", type: "image/svg+xml" },
+    ],
+    apple: [
+      { url: "/logo-symbol.svg", type: "image/svg+xml" },
+    ],
+  },
 };
 
 export default function RootLayout({
