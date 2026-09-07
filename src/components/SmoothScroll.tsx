@@ -6,13 +6,13 @@ import Lenis from "lenis";
 export default function SmoothScroll({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const lenis = new Lenis({
-      duration: 1.2,
+      duration: 0.75, // Snappy & responsive duration (reduced from 1.2s to eliminate sluggishness)
       easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
       orientation: "vertical",
       gestureOrientation: "vertical",
       smoothWheel: true,
-      wheelMultiplier: 0.9,
-      touchMultiplier: 1.5,
+      wheelMultiplier: 1.15, // Natural scroll multiplier (increased from 0.9 to provide immediate tactile response)
+      touchMultiplier: 1.8,
     });
 
     // Handle global anchor links with smooth scroll and header offset
@@ -27,7 +27,7 @@ export default function SmoothScroll({ children }: { children: React.ReactNode }
           e.preventDefault();
           lenis.scrollTo(targetEl as HTMLElement, {
             offset: -80,
-            duration: 1.2,
+            duration: 0.8,
           });
         }
       }
