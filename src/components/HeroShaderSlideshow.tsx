@@ -62,7 +62,7 @@ const FRAGMENT_SHADER_SRC = `
     return v;
   }
 
-  // --- CURL NOISE VECTOR FIELD FOR FLUID TURBULENCE ---
+  // --- CURL NOISE VECTOR FIELD FOR FLUID SWIRLS ---
   vec2 curlNoise(vec2 p) {
     const float eps = 0.01;
     float n1 = noise(p + vec2(0.0, eps));
@@ -102,55 +102,61 @@ const FRAGMENT_SHADER_SRC = `
     vec2 d_vec = p_aspect - mouse_aspect;
     float d_raw = length(d_vec);
 
-    // Motion factor: when cursor is stationary (u_motion -> 0.0), distortion decays to zero
+    // Motion factor: 1.0 when moving rapidly, decays to 0.0 when resting
     float m = clamp(u_motion, 0.0, 1.0);
 
-    // 3. Fluid Domain Warping & Curl Vector Distortions (decays when stationary)
-    vec2 curl = curlNoise(p_aspect * 3.5 + u_time * 0.25);
-    float turb = fbm(p_aspect * 4.0 - vec2(u_time * 0.2, u_time * 0.1));
-    float warp_amplitude = 0.006 + 0.032 * m;
+    // 3. Fluid Domain Warping: dynamic boundary that softens to a clean circle when still
+    vec2 curl = curlNoise(p_aspect * 3.5 + u_time * 0.3);
+    float turb = fbm(p_aspect * 4.0 - vec2(u_time * 0.25, u_time * 0.15));
+    float warp_amplitude = 0.012 + 0.065 * m;
 
-    // Comet velocity wake stretch (only while moving)
+    // Comet velocity wake stretch along movement direction
     vec2 vel_aspect = vec2(u_mouse_vel.x * aspect, u_mouse_vel.y);
     float vel_len = length(vel_aspect);
     vec2 vel_dir = vel_len > 0.0001 ? vel_aspect / vel_len : vec2(0.0);
     float vel_dot = dot(normalize(d_vec + 0.0001), -vel_dir);
-    float wake_stretch = clamp(vel_len * 0.10, 0.0, 0.04) * smoothstep(0.0, 1.0, vel_dot) * m;
+    float wake_stretch = clamp(vel_len * 0.25, 0.0, 0.10) * smoothstep(0.0, 1.0, vel_dot) * m;
 
-    // Breathing harmonic (gentle and subtle)
-    float breathing = 0.006 * sin(u_time * 1.5 + d_raw * 6.0) * m;
-    float warped_dist = d_raw - ((turb * 0.6 + curl.x * 0.4) * warp_amplitude + breathing - wake_stretch);
+    // Fluid warped distance with breathing harmonic
+    float breathing = 0.012 * sin(u_time * 2.0 + d_raw * 8.0) * m;
+    float warped_dist = d_raw - ((turb * 0.65 + curl.x * 0.35) * warp_amplitude + breathing - wake_stretch);
 
-    // Generous, smooth lens radius
-    float base_radius = 0.36;
-    float reveal_mask = smoothstep(base_radius, base_radius * 0.22, warped_dist) * u_hover;
+    // Lens radius with smooth falloff
+    float base_radius = 0.38;
+    float reveal_mask = smoothstep(base_radius, base_radius * 0.20, warped_dist) * u_hover;
 
-    // Subtle edge rim light (only gentle accent when moving, very soft when still)
-    float rim_zone = abs(warped_dist - base_radius * 0.75);
-    float rim_glow = exp(-pow(rim_zone / 0.035, 2.0)) * 0.20 * u_hover * (0.15 + 0.85 * m);
+    // 4. Dynamic Water Surface Ripple Wave (ripples when moving, settles when still)
+    float ripple = sin(warped_dist * 24.0 - u_time * 5.0) * exp(-warped_dist * 3.8) * 0.012 * m * u_hover;
 
-    // Subtle optical ripple only during motion
-    float ripple = sin(warped_dist * 26.0 - u_time * 4.0) * exp(-warped_dist * 4.0) * 0.005 * m * u_hover;
-
-    // 4. Clean Refraction & Chromatic Dispersion:
-    // When stationary (m -> 0.0): dispersion is ZERO -> crystal clear, razor sharp original photo!
-    // When moving: delicate prismatic shimmer without heavy rainbow smears
+    // 5. Optical Refraction + Chromatic Dispersion Math:
     vec2 radial_dir = d_raw > 0.001 ? normalize(d_vec) : vec2(0.0);
-    float dispersion_amt = (reveal_mask * 0.0016 + ripple) * m;
-    vec2 lens_dispersion = radial_dir * dispersion_amt;
 
-    // Sample color textures with subtle chromatic aberration only during motion
-    vec4 col0_r = texture2D(u_tex0, uv0 + lens_dispersion);
-    vec4 col0_g = texture2D(u_tex0, uv0);
-    vec4 col0_b = texture2D(u_tex0, uv0 - lens_dispersion);
+    // Physical lens displacement (refracts and ripples while moving)
+    vec2 lens_refract = (radial_dir * (reveal_mask * 0.009 + ripple) + curl * 0.004 * m) * m;
+
+    // Subtle chromatic dispersion fringe along the refraction gradient
+    vec2 chromatic_split = radial_dir * (0.0045 * reveal_mask * m);
+
+    // Sample color textures: when m -> 0, offsets are exactly 0 (crystal clear original photo!)
+    vec2 uv0_r = uv0 + lens_refract + chromatic_split;
+    vec2 uv0_g = uv0 + lens_refract;
+    vec2 uv0_b = uv0 + lens_refract - chromatic_split;
+
+    vec4 col0_r = texture2D(u_tex0, uv0_r);
+    vec4 col0_g = texture2D(u_tex0, uv0_g);
+    vec4 col0_b = texture2D(u_tex0, uv0_b);
     vec3 col0_color = vec3(col0_r.r, col0_g.g, col0_b.b);
 
-    vec4 col1_r = texture2D(u_tex1, uv1 + lens_dispersion);
-    vec4 col1_g = texture2D(u_tex1, uv1);
-    vec4 col1_b = texture2D(u_tex1, uv1 - lens_dispersion);
+    vec2 uv1_r = uv1 + lens_refract + chromatic_split;
+    vec2 uv1_g = uv1 + lens_refract;
+    vec2 uv1_b = uv1 + lens_refract - chromatic_split;
+
+    vec4 col1_r = texture2D(u_tex1, uv1_r);
+    vec4 col1_g = texture2D(u_tex1, uv1_g);
+    vec4 col1_b = texture2D(u_tex1, uv1_b);
     vec3 col1_color = vec3(col1_r.r, col1_g.g, col1_b.b);
 
-    // 5. Dust particle slideshow sweep transition
+    // 6. Dust particle slideshow sweep transition
     float n = fbm(v_uv * 18.0 + vec2(u_progress * 1.5, 0.0));
     float grain = hash(v_uv * 600.0 + u_progress * 40.0);
     float sweep = u_progress * 1.4 - 0.2;
@@ -174,12 +180,13 @@ const FRAGMENT_SHADER_SRC = `
     vec3 base_mono = mix(mono1, mono0, slide_mask) + vec3(spark);
     vec3 active_color = mix(col1_color, col0_color, slide_mask);
 
-    // Clean, natural authentic photograph colors (without artificial color oversaturation)
-    vec3 clean_photo = active_color * 1.04;
+    // Subtle edge caustics rim light
+    float rim_zone = abs(warped_dist - base_radius * 0.76);
+    float rim_glow = exp(-pow(rim_zone / 0.04, 2.0)) * 0.28 * u_hover * (0.2 + 0.8 * m);
     vec3 rim_light = vec3(1.0, 0.98, 0.95) * rim_glow;
 
-    // Blend between monochrome and crystal-clear original photo
-    vec3 final_rgb = mix(base_mono, clean_photo, reveal_mask) + rim_light;
+    // Blend between monochrome and full color photograph
+    vec3 final_rgb = mix(base_mono, active_color, reveal_mask) + rim_light;
 
     // Dynamically increase opacity within reveal bubble so the true photograph shines
     float final_alpha = mix(0.28, 0.95, reveal_mask);
@@ -293,9 +300,8 @@ export default function HeroShaderSlideshow({
     let mouseVelY = 0;
     let targetHover = 0.0;
     let currentHover = 0.0;
-    let targetMotion = 0.0;
     let currentMotion = 0.0;
-    let lastMoveTime = performance.now();
+    let lastMoveTime = 0;
     let hasEntered = false;
     let lastPhysicsTime = performance.now();
 
@@ -313,16 +319,9 @@ export default function HeroShaderSlideshow({
       ) {
         const nx = (e.clientX - cRect.left) / cRect.width;
         const ny = (e.clientY - cRect.top) / cRect.height;
-        const clampedX = Math.max(0.0, Math.min(1.0, nx));
-        const clampedY = Math.max(0.0, Math.min(1.0, ny));
-
-        const dist = Math.hypot(clampedX - targetMouseX, clampedY - targetMouseY);
-        targetMouseX = clampedX;
-        targetMouseY = clampedY;
+        targetMouseX = Math.max(0.0, Math.min(1.0, nx));
+        targetMouseY = Math.max(0.0, Math.min(1.0, ny));
         targetHover = 1.0;
-
-        // Motion impulse based on cursor speed
-        targetMotion = Math.min(dist * 35.0 + 0.2, 1.0);
         lastMoveTime = performance.now();
 
         if (!hasEntered) {
@@ -331,17 +330,14 @@ export default function HeroShaderSlideshow({
           prevMouseX = targetMouseX;
           prevMouseY = targetMouseY;
           hasEntered = true;
-          targetMotion = 0.0;
         }
       } else {
         targetHover = 0.0;
-        targetMotion = 0.0;
       }
     };
 
     const handlePointerLeave = () => {
       targetHover = 0.0;
-      targetMotion = 0.0;
     };
 
     window.addEventListener("pointermove", handlePointerMove, { passive: true });
@@ -383,20 +379,25 @@ export default function HeroShaderSlideshow({
       prevMouseX = currentMouseX;
       prevMouseY = currentMouseY;
 
-      mouseVelX += (vx - mouseVelX) * 0.22;
-      mouseVelY += (vy - mouseVelY) * 0.22;
+      mouseVelX += (vx - mouseVelX) * 0.25;
+      mouseVelY += (vy - mouseVelY) * 0.25;
 
-      currentHover += (targetHover - currentHover) * 0.08;
+      const speed = Math.hypot(vx, vy);
 
-      // When cursor stops moving (>100ms idle), targetMotion drops to 0.0
+      currentHover += (targetHover - currentHover) * 0.10;
+
+      // Dynamic motion energy calculation:
+      // When cursor moves, motion increases proportionally to speed.
+      // When stationary for > 150ms, target motion drops to 0.0.
       const idleTime = now - lastMoveTime;
-      if (idleTime > 100) {
-        targetMotion = 0.0;
+      let targetMotion = 0.0;
+      if (idleTime < 180 && targetHover > 0.05) {
+        targetMotion = Math.min(speed * 2.2 + 0.35, 1.0);
       }
 
-      // Smooth relaxation: decay down to 0.0 when resting, quick attack when moving
-      const motionLerp = targetMotion > currentMotion ? 0.22 : 0.04;
-      currentMotion += (targetMotion - currentMotion) * motionLerp;
+      // Responsive attack (0.28) when moving, smooth water-settling decay (0.038) when still
+      const motionRate = targetMotion > currentMotion ? 0.28 : 0.038;
+      currentMotion += (targetMotion - currentMotion) * motionRate;
 
       let smoothProgress = 0.0;
 
