@@ -121,45 +121,27 @@ const FRAGMENT_SHADER_SRC = `
     float wake_stretch = clamp(vel_len * 0.32, 0.0, 0.14) * smoothstep(-0.2, 1.0, vel_dot) * m;
 
     // Liquid surface tension boundary warping
-    float warp_amplitude = 0.010 + 0.075 * m;
-    float breathing = 0.012 * sin(u_time * 2.2 + d_raw * 7.0) * m;
+    float warp_amplitude = 0.008 + 0.065 * m;
+    float breathing = 0.010 * sin(u_time * 2.2 + d_raw * 7.0) * m;
     float warped_dist = d_raw - ((turb * 0.6 + water_curl.x * 0.4) * warp_amplitude + breathing - wake_stretch);
 
-    // Generous, expansive liquid reveal radius (larger area for fun exploration)
+    // Generous, expansive liquid reveal radius
     float base_radius = 0.52;
     float dynamic_radius = base_radius + clamp(vel_len * 0.12, 0.0, 0.08) * m;
-    float reveal_mask = smoothstep(dynamic_radius, dynamic_radius * 0.22, warped_dist) * u_hover;
+    float reveal_mask = smoothstep(dynamic_radius, dynamic_radius * 0.25, warped_dist) * u_hover;
 
     // 4. Multi-frequency surface water ripples that disperse outwards when moving
     float wave1 = sin(warped_dist * 22.0 - u_time * 6.0) * exp(-warped_dist * 2.5);
     float wave2 = cos(warped_dist * 13.0 - u_time * 3.8) * exp(-warped_dist * 1.8);
-    float water_ripple = (wave1 * 0.013 + wave2 * 0.007) * m * u_hover;
+    float water_ripple = (wave1 * 0.010 + wave2 * 0.005) * m * u_hover;
 
-    // 5. Physical water refraction vector (bends the underlying image like liquid glass)
+    // 5. Cohesive Water Refraction Vector:
+    // Applied to the unified UV coordinates so there is NO double-image / NO ghosting!
     vec2 radial_dir = d_raw > 0.001 ? normalize(d_vec) : vec2(0.0);
-    vec2 water_refract = (radial_dir * (reveal_mask * 0.012 + water_ripple) + water_curl * 0.006 * m) * m;
+    vec2 water_refract = (radial_dir * (reveal_mask * 0.010 + water_ripple) + water_curl * 0.005 * m) * m;
 
-    // Prismatic chromatic dispersion along the liquid meniscus edge
-    vec2 chromatic_split = radial_dir * (0.0035 * reveal_mask * m);
-
-    // Sample color textures: when m -> 0, offsets are 0.0 -> crystal clear, undistorted photo!
-    vec2 uv0_r = uv0 + water_refract + chromatic_split;
-    vec2 uv0_g = uv0 + water_refract;
-    vec2 uv0_b = uv0 + water_refract - chromatic_split;
-
-    vec4 col0_r = texture2D(u_tex0, uv0_r);
-    vec4 col0_g = texture2D(u_tex0, uv0_g);
-    vec4 col0_b = texture2D(u_tex0, uv0_b);
-    vec3 col0_color = vec3(col0_r.r, col0_g.g, col0_b.b);
-
-    vec2 uv1_r = uv1 + water_refract + chromatic_split;
-    vec2 uv1_g = uv1 + water_refract;
-    vec2 uv1_b = uv1 + water_refract - chromatic_split;
-
-    vec4 col1_r = texture2D(u_tex1, uv1_r);
-    vec4 col1_g = texture2D(u_tex1, uv1_g);
-    vec4 col1_b = texture2D(u_tex1, uv1_b);
-    vec3 col1_color = vec3(col1_r.r, col1_g.g, col1_b.b);
+    vec2 final_uv0 = uv0 + water_refract;
+    vec2 final_uv1 = uv1 + water_refract;
 
     // 6. Dust particle slideshow sweep transition
     float n = fbm(v_uv * 18.0 + vec2(u_progress * 1.5, 0.0));
@@ -170,12 +152,13 @@ const FRAGMENT_SHADER_SRC = `
     float dustZone = smoothstep(0.18, 0.0, distToEdge) * sin(u_progress * 3.14159265);
     vec2 dustOffset = vec2(grain * 0.05 + dustZone * 0.03, (grain - 0.5) * 0.03) * dustZone;
 
-    // Monochrome base sample
-    vec4 col0_base = texture2D(u_tex0, uv0 + dustOffset);
-    vec4 col1_base = texture2D(u_tex1, uv1);
+    // SINGLE-PASS TEXTURE SAMPLING (NO DOUBLE LAYERING / NO GHOST SHADOWS)
+    vec4 col0 = texture2D(u_tex0, final_uv0 + dustOffset);
+    vec4 col1 = texture2D(u_tex1, final_uv1);
 
-    float gray0 = dot(col0_base.rgb, vec3(0.299, 0.587, 0.114));
-    float gray1 = dot(col1_base.rgb, vec3(0.299, 0.587, 0.114));
+    // Derive monochrome and color from the exact same sampled pixel
+    float gray0 = dot(col0.rgb, vec3(0.299, 0.587, 0.114));
+    float gray1 = dot(col1.rgb, vec3(0.299, 0.587, 0.114));
     vec3 mono0 = vec3(gray0 * 1.15, gray0 * 1.12, gray0 * 1.08);
     vec3 mono1 = vec3(gray1 * 1.15, gray1 * 1.12, gray1 * 1.08);
 
@@ -183,14 +166,14 @@ const FRAGMENT_SHADER_SRC = `
     float spark = grain * dustZone * 0.3;
 
     vec3 base_mono = mix(mono1, mono0, slide_mask) + vec3(spark);
-    vec3 active_color = mix(col1_color, col0_color, slide_mask);
+    vec3 active_color = mix(col1.rgb, col0.rgb, slide_mask);
 
-    // Liquid meniscus light highlight at droplet edge
+    // Liquid surface meniscus highlight at droplet edge
     float rim_zone = abs(warped_dist - dynamic_radius * 0.80);
-    float rim_glow = exp(-pow(rim_zone / 0.045, 2.0)) * 0.32 * u_hover * (0.2 + 0.8 * m);
+    float rim_glow = exp(-pow(rim_zone / 0.04, 2.0)) * 0.22 * u_hover * (0.2 + 0.8 * m);
     vec3 rim_light = vec3(1.0, 0.98, 0.95) * rim_glow;
 
-    // Blend between monochrome base and fluid full-color photograph
+    // Single cohesive layer: cleanly blend saturation from monochrome to original color
     vec3 final_rgb = mix(base_mono, active_color, reveal_mask) + rim_light;
 
     // Dynamically increase opacity within reveal bubble so the true photograph shines
@@ -376,7 +359,6 @@ export default function HeroShaderSlideshow({
       const dt = Math.min((now - lastPhysicsTime) / 1000, 0.1);
       lastPhysicsTime = now;
 
-      // 0.14 spring lerp gives that graceful liquid inertia
       currentMouseX += (targetMouseX - currentMouseX) * 0.14;
       currentMouseY += (targetMouseY - currentMouseY) * 0.14;
 
@@ -393,7 +375,6 @@ export default function HeroShaderSlideshow({
       currentHover += (targetHover - currentHover) * 0.10;
 
       // Dynamic motion energy calculation:
-      // When moving, motion rises vigorously to trigger water surface ripples & refraction.
       const idleTime = now - lastMoveTime;
       let targetMotion = 0.0;
       if (idleTime < 200 && targetHover > 0.05) {
