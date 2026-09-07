@@ -62,7 +62,7 @@ const FRAGMENT_SHADER_SRC = `
     return v;
   }
 
-  // --- CURL NOISE VECTOR FIELD FOR FLUID SWIRLS ---
+  // --- CURL NOISE VECTOR FIELD FOR FLUID VORTICITY ---
   vec2 curlNoise(vec2 p) {
     const float eps = 0.01;
     float n1 = noise(p + vec2(0.0, eps));
@@ -95,61 +95,66 @@ const FRAGMENT_SHADER_SRC = `
     vec2 uv0 = getCoverUV(v_uv, u_resolution, u_image_res0);
     vec2 uv1 = getCoverUV(v_uv, u_resolution, u_image_res1);
 
-    // 2. Aspect-Ratio Corrected Coordinates for Isotropic Radius
+    // 2. Isotropic Coordinates for Natural Circular Water Droplet
     float aspect = u_resolution.x / u_resolution.y;
     vec2 p_aspect = vec2(v_uv.x * aspect, v_uv.y);
     vec2 mouse_aspect = vec2(u_mouse.x * aspect, u_mouse.y);
     vec2 d_vec = p_aspect - mouse_aspect;
     float d_raw = length(d_vec);
 
-    // Motion factor: 1.0 when moving rapidly, decays to 0.0 when resting
+    // Motion factor: 1.0 when moving, smoothly settles to 0.0 when still
     float m = clamp(u_motion, 0.0, 1.0);
 
-    // 3. Fluid Domain Warping: dynamic boundary that softens to a clean circle when still
-    vec2 curl = curlNoise(p_aspect * 3.5 + u_time * 0.3);
-    float turb = fbm(p_aspect * 4.0 - vec2(u_time * 0.25, u_time * 0.15));
-    float warp_amplitude = 0.012 + 0.065 * m;
+    // 3. Fluid Vorticity: dual-octave curl noise simulating fluid whirlpools
+    vec2 curl1 = curlNoise(p_aspect * 3.2 + u_time * 0.35);
+    vec2 curl2 = curlNoise(p_aspect * 6.0 - u_time * 0.25 + curl1 * 0.6);
+    vec2 water_curl = curl1 * 0.7 + curl2 * 0.3;
 
-    // Comet velocity wake stretch along movement direction
+    // Organic liquid turbulence
+    float turb = fbm(p_aspect * 3.8 - vec2(u_time * 0.25, u_time * 0.15));
+
+    // Dynamic water droplet wake stretching along cursor velocity vector
     vec2 vel_aspect = vec2(u_mouse_vel.x * aspect, u_mouse_vel.y);
     float vel_len = length(vel_aspect);
     vec2 vel_dir = vel_len > 0.0001 ? vel_aspect / vel_len : vec2(0.0);
     float vel_dot = dot(normalize(d_vec + 0.0001), -vel_dir);
-    float wake_stretch = clamp(vel_len * 0.25, 0.0, 0.10) * smoothstep(0.0, 1.0, vel_dot) * m;
+    float wake_stretch = clamp(vel_len * 0.32, 0.0, 0.14) * smoothstep(-0.2, 1.0, vel_dot) * m;
 
-    // Fluid warped distance with breathing harmonic
-    float breathing = 0.012 * sin(u_time * 2.0 + d_raw * 8.0) * m;
-    float warped_dist = d_raw - ((turb * 0.65 + curl.x * 0.35) * warp_amplitude + breathing - wake_stretch);
+    // Liquid surface tension boundary warping
+    float warp_amplitude = 0.010 + 0.075 * m;
+    float breathing = 0.012 * sin(u_time * 2.2 + d_raw * 7.0) * m;
+    float warped_dist = d_raw - ((turb * 0.6 + water_curl.x * 0.4) * warp_amplitude + breathing - wake_stretch);
 
-    // Lens radius with smooth falloff
-    float base_radius = 0.38;
-    float reveal_mask = smoothstep(base_radius, base_radius * 0.20, warped_dist) * u_hover;
+    // Generous, expansive liquid reveal radius (larger area for fun exploration)
+    float base_radius = 0.52;
+    float dynamic_radius = base_radius + clamp(vel_len * 0.12, 0.0, 0.08) * m;
+    float reveal_mask = smoothstep(dynamic_radius, dynamic_radius * 0.22, warped_dist) * u_hover;
 
-    // 4. Dynamic Water Surface Ripple Wave (ripples when moving, settles when still)
-    float ripple = sin(warped_dist * 24.0 - u_time * 5.0) * exp(-warped_dist * 3.8) * 0.012 * m * u_hover;
+    // 4. Multi-frequency surface water ripples that disperse outwards when moving
+    float wave1 = sin(warped_dist * 22.0 - u_time * 6.0) * exp(-warped_dist * 2.5);
+    float wave2 = cos(warped_dist * 13.0 - u_time * 3.8) * exp(-warped_dist * 1.8);
+    float water_ripple = (wave1 * 0.013 + wave2 * 0.007) * m * u_hover;
 
-    // 5. Optical Refraction + Chromatic Dispersion Math:
+    // 5. Physical water refraction vector (bends the underlying image like liquid glass)
     vec2 radial_dir = d_raw > 0.001 ? normalize(d_vec) : vec2(0.0);
+    vec2 water_refract = (radial_dir * (reveal_mask * 0.012 + water_ripple) + water_curl * 0.006 * m) * m;
 
-    // Physical lens displacement (refracts and ripples while moving)
-    vec2 lens_refract = (radial_dir * (reveal_mask * 0.009 + ripple) + curl * 0.004 * m) * m;
+    // Prismatic chromatic dispersion along the liquid meniscus edge
+    vec2 chromatic_split = radial_dir * (0.0035 * reveal_mask * m);
 
-    // Subtle chromatic dispersion fringe along the refraction gradient
-    vec2 chromatic_split = radial_dir * (0.0045 * reveal_mask * m);
-
-    // Sample color textures: when m -> 0, offsets are exactly 0 (crystal clear original photo!)
-    vec2 uv0_r = uv0 + lens_refract + chromatic_split;
-    vec2 uv0_g = uv0 + lens_refract;
-    vec2 uv0_b = uv0 + lens_refract - chromatic_split;
+    // Sample color textures: when m -> 0, offsets are 0.0 -> crystal clear, undistorted photo!
+    vec2 uv0_r = uv0 + water_refract + chromatic_split;
+    vec2 uv0_g = uv0 + water_refract;
+    vec2 uv0_b = uv0 + water_refract - chromatic_split;
 
     vec4 col0_r = texture2D(u_tex0, uv0_r);
     vec4 col0_g = texture2D(u_tex0, uv0_g);
     vec4 col0_b = texture2D(u_tex0, uv0_b);
     vec3 col0_color = vec3(col0_r.r, col0_g.g, col0_b.b);
 
-    vec2 uv1_r = uv1 + lens_refract + chromatic_split;
-    vec2 uv1_g = uv1 + lens_refract;
-    vec2 uv1_b = uv1 + lens_refract - chromatic_split;
+    vec2 uv1_r = uv1 + water_refract + chromatic_split;
+    vec2 uv1_g = uv1 + water_refract;
+    vec2 uv1_b = uv1 + water_refract - chromatic_split;
 
     vec4 col1_r = texture2D(u_tex1, uv1_r);
     vec4 col1_g = texture2D(u_tex1, uv1_g);
@@ -180,16 +185,16 @@ const FRAGMENT_SHADER_SRC = `
     vec3 base_mono = mix(mono1, mono0, slide_mask) + vec3(spark);
     vec3 active_color = mix(col1_color, col0_color, slide_mask);
 
-    // Subtle edge caustics rim light
-    float rim_zone = abs(warped_dist - base_radius * 0.76);
-    float rim_glow = exp(-pow(rim_zone / 0.04, 2.0)) * 0.28 * u_hover * (0.2 + 0.8 * m);
+    // Liquid meniscus light highlight at droplet edge
+    float rim_zone = abs(warped_dist - dynamic_radius * 0.80);
+    float rim_glow = exp(-pow(rim_zone / 0.045, 2.0)) * 0.32 * u_hover * (0.2 + 0.8 * m);
     vec3 rim_light = vec3(1.0, 0.98, 0.95) * rim_glow;
 
-    // Blend between monochrome and full color photograph
+    // Blend between monochrome base and fluid full-color photograph
     vec3 final_rgb = mix(base_mono, active_color, reveal_mask) + rim_light;
 
     // Dynamically increase opacity within reveal bubble so the true photograph shines
-    float final_alpha = mix(0.28, 0.95, reveal_mask);
+    float final_alpha = mix(0.28, 0.96, reveal_mask);
 
     gl_FragColor = vec4(final_rgb, final_alpha);
   }
@@ -367,12 +372,13 @@ export default function HeroShaderSlideshow({
 
       resize();
 
-      // Damped spring physics for cursor tracking
+      // Fluid water lag & inertia tracking
       const dt = Math.min((now - lastPhysicsTime) / 1000, 0.1);
       lastPhysicsTime = now;
 
-      currentMouseX += (targetMouseX - currentMouseX) * 0.16;
-      currentMouseY += (targetMouseY - currentMouseY) * 0.16;
+      // 0.14 spring lerp gives that graceful liquid inertia
+      currentMouseX += (targetMouseX - currentMouseX) * 0.14;
+      currentMouseY += (targetMouseY - currentMouseY) * 0.14;
 
       const vx = (currentMouseX - prevMouseX) / (dt || 0.016);
       const vy = (currentMouseY - prevMouseY) / (dt || 0.016);
@@ -387,16 +393,15 @@ export default function HeroShaderSlideshow({
       currentHover += (targetHover - currentHover) * 0.10;
 
       // Dynamic motion energy calculation:
-      // When cursor moves, motion increases proportionally to speed.
-      // When stationary for > 150ms, target motion drops to 0.0.
+      // When moving, motion rises vigorously to trigger water surface ripples & refraction.
       const idleTime = now - lastMoveTime;
       let targetMotion = 0.0;
-      if (idleTime < 180 && targetHover > 0.05) {
-        targetMotion = Math.min(speed * 2.2 + 0.35, 1.0);
+      if (idleTime < 200 && targetHover > 0.05) {
+        targetMotion = Math.min(speed * 2.5 + 0.40, 1.0);
       }
 
-      // Responsive attack (0.28) when moving, smooth water-settling decay (0.038) when still
-      const motionRate = targetMotion > currentMotion ? 0.28 : 0.038;
+      // Responsive fluid attack (0.26) when moving, smooth water-settling decay (0.035) when still
+      const motionRate = targetMotion > currentMotion ? 0.26 : 0.035;
       currentMotion += (targetMotion - currentMotion) * motionRate;
 
       let smoothProgress = 0.0;
