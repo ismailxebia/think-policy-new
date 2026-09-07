@@ -25,7 +25,8 @@ const FRAGMENT_SHADER_SRC = `
   uniform sampler2D u_tex1;
   uniform float u_progress;
   uniform vec2 u_resolution;
-  uniform vec2 u_image_res;
+  uniform vec2 u_image_res0;
+  uniform vec2 u_image_res1;
 
   float hash(vec2 p) {
     return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
@@ -54,33 +55,42 @@ const FRAGMENT_SHADER_SRC = `
     return v;
   }
 
-  void main() {
-    // Aspect ratio cover calculations
-    vec2 ratio = vec2(
-      min((u_resolution.x / u_resolution.y) / (u_image_res.x / u_image_res.y), 1.0),
-      min((u_resolution.y / u_resolution.x) / (u_image_res.y / u_image_res.x), 1.0)
+  vec2 getCoverUV(vec2 uv, vec2 screenRes, vec2 imgRes) {
+    float screenAspect = screenRes.x / screenRes.y;
+    float imgAspect = imgRes.x / imgRes.y;
+    vec2 scale = vec2(1.0);
+    if (screenAspect > imgAspect) {
+      scale.y = imgAspect / screenAspect;
+    } else {
+      scale.x = screenAspect / imgAspect;
+    }
+    return vec2(
+      uv.x * scale.x + (1.0 - scale.x) * 0.5,
+      uv.y * scale.y + (1.0 - scale.y) * 0.5
     );
-    vec2 uv = vec2(
-      v_uv.x * ratio.x + (1.0 - ratio.x) * 0.5,
-      v_uv.y * ratio.y + (1.0 - ratio.y) * 0.5
-    );
+  }
 
-    // Fine organic dust & sand particles noise
-    float n = fbm(uv * 18.0 + vec2(u_progress * 1.5, 0.0));
-    float grain = hash(uv * 600.0 + u_progress * 40.0);
+  void main() {
+    // Individual aspect-ratio-corrected UV coordinates for each texture
+    vec2 uv0 = getCoverUV(v_uv, u_resolution, u_image_res0);
+    vec2 uv1 = getCoverUV(v_uv, u_resolution, u_image_res1);
+
+    // Screen-space noise for uniform dust wavefront across entire hero viewport
+    float n = fbm(v_uv * 18.0 + vec2(u_progress * 1.5, 0.0));
+    float grain = hash(v_uv * 600.0 + u_progress * 40.0);
 
     // Left-to-right sweep line with organic particle wavefront
     float sweep = u_progress * 1.4 - 0.2;
-    float edgeProgress = uv.x + (n * 0.22 + grain * 0.08) - 0.15;
+    float edgeProgress = v_uv.x + (n * 0.22 + grain * 0.08) - 0.15;
 
     // Crumbling dust particles flying rightwards during disintegration
-    float distToEdge = abs(uv.x - u_progress);
+    float distToEdge = abs(v_uv.x - u_progress);
     float dustZone = smoothstep(0.18, 0.0, distToEdge) * sin(u_progress * 3.14159265);
     vec2 dustOffset = vec2(grain * 0.05 + dustZone * 0.03, (grain - 0.5) * 0.03) * dustZone;
 
     // Sample top texture (col0) and revealed background texture (col1)
-    vec4 col0 = texture2D(u_tex0, uv + dustOffset);
-    vec4 col1 = texture2D(u_tex1, uv);
+    vec4 col0 = texture2D(u_tex0, uv0 + dustOffset);
+    vec4 col1 = texture2D(u_tex1, uv1);
 
     // Grayscale tone mapping with elegant contrast
     float gray0 = dot(col0.rgb, vec3(0.299, 0.587, 0.114));
@@ -151,22 +161,22 @@ export default function HeroShaderSlideshow({
     const uTex1 = gl.getUniformLocation(program, "u_tex1");
     const uProgress = gl.getUniformLocation(program, "u_progress");
     const uResolution = gl.getUniformLocation(program, "u_resolution");
-    const uImageRes = gl.getUniformLocation(program, "u_image_res");
+    const uImageRes0 = gl.getUniformLocation(program, "u_image_res0");
+    const uImageRes1 = gl.getUniformLocation(program, "u_image_res1");
 
     const textures: WebGLTexture[] = [];
+    const imageResolutions: [number, number][] = images.map(() => [1920, 1080]);
     let loadedCount = 0;
-    let imageWidth = 1920;
-    let imageHeight = 1080;
 
     images.forEach((src, idx) => {
       const tex = gl.createTexture()!;
       textures[idx] = tex;
-      const img = document.createElement("img");
+      const img = new Image();
       img.crossOrigin = "anonymous";
-      img.src = src;
-      img.onload = () => {
-        imageWidth = img.naturalWidth || 1920;
-        imageHeight = img.naturalHeight || 1080;
+      
+      const handleLoad = () => {
+        if (!img.naturalWidth || !img.naturalHeight) return;
+        imageResolutions[idx] = [img.naturalWidth, img.naturalHeight];
         gl.bindTexture(gl.TEXTURE_2D, tex);
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -175,6 +185,12 @@ export default function HeroShaderSlideshow({
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
         loadedCount++;
       };
+
+      img.onload = handleLoad;
+      img.src = src;
+      if (img.complete && img.naturalWidth > 0) {
+        handleLoad();
+      }
     });
 
     let currentIndex = 0;
@@ -190,8 +206,8 @@ export default function HeroShaderSlideshow({
     function resize() {
       if (!canvas || !gl) return;
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      const width = canvas.clientWidth * dpr;
-      const height = canvas.clientHeight * dpr;
+      const width = (canvas.clientWidth || window.innerWidth) * dpr;
+      const height = (canvas.clientHeight || 600) * dpr;
       if (canvas.width !== width || canvas.height !== height) {
         canvas.width = width;
         canvas.height = height;
@@ -247,7 +263,8 @@ export default function HeroShaderSlideshow({
 
       gl.uniform1f(uProgress, smoothProgress);
       gl.uniform2f(uResolution, canvas!.width, canvas!.height);
-      gl.uniform2f(uImageRes, imageWidth, imageHeight);
+      gl.uniform2f(uImageRes0, imageResolutions[currentIndex][0], imageResolutions[currentIndex][1]);
+      gl.uniform2f(uImageRes1, imageResolutions[nextIndex][0], imageResolutions[nextIndex][1]);
 
       gl.drawArrays(gl.TRIANGLES, 0, 6);
 
