@@ -27,13 +27,12 @@ const FRAGMENT_SHADER_SRC = `
   uniform vec2 u_resolution;
   uniform vec2 u_image_res0;
   uniform vec2 u_image_res1;
-  uniform vec2 u_mouse;
-  uniform vec2 u_mouse_vel;
-  uniform float u_speed;
+  uniform vec2 u_trail[8];
+  uniform float u_trail_radii[8];
   uniform float u_hover;
   uniform float u_time;
 
-  // Procedural noise for the slideshow transition
+  // --- PROCEDURAL NOISE & FBM ---
   float hash(vec2 p) {
     return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
   }
@@ -61,7 +60,19 @@ const FRAGMENT_SHADER_SRC = `
     return v;
   }
 
-  // Exact object-fit cover UV calculation (preserves authentic aspect ratio)
+  // Incompressible 2D Curl Noise for fluid stream bleeding
+  vec2 curlNoise(vec2 p) {
+    const float eps = 0.015;
+    float n1 = noise(p + vec2(0.0, eps));
+    float n2 = noise(p - vec2(0.0, eps));
+    float n3 = noise(p + vec2(eps, 0.0));
+    float n4 = noise(p - vec2(eps, 0.0));
+    float dy = (n1 - n2) / (2.0 * eps);
+    float dx = (n3 - n4) / (2.0 * eps);
+    return vec2(dy, -dx);
+  }
+
+  // Exact object-fit cover UV calculation
   vec2 getCoverUV(vec2 uv, vec2 screenRes, vec2 imgRes) {
     float screenAspect = screenRes.x / screenRes.y;
     float imgAspect = imgRes.x / imgRes.y;
@@ -77,30 +88,53 @@ const FRAGMENT_SHADER_SRC = `
     );
   }
 
+  // Exact Signed Distance to a Tapered Capsule / Fluid Brush Segment
+  float distToTaperedSegment(vec2 p, vec2 a, vec2 b, float ra, float rb) {
+    vec2 ba = b - a;
+    vec2 pa = p - a;
+    float l2 = dot(ba, ba);
+    if (l2 < 0.00001) return length(pa) - ra;
+    float t = clamp(dot(pa, ba) / l2, 0.0, 1.0);
+    vec2 closest = a + ba * t;
+    float r = mix(ra, rb, t);
+    return length(p - closest) - r;
+  }
+
   void main() {
-    // 1. Exact, pin-sharp texture UV coordinates (zero distortion on image content)
+    // 1. Exact, pin-sharp UV coordinates (zero blur on image)
     vec2 uv0 = getCoverUV(v_uv, u_resolution, u_image_res0);
     vec2 uv1 = getCoverUV(v_uv, u_resolution, u_image_res1);
 
-    // 2. Aspect-Ratio Corrected Space
+    // 2. Aspect-Ratio Corrected Metric Space
     float aspect = u_resolution.x / u_resolution.y;
     vec2 p = vec2(v_uv.x * aspect, v_uv.y);
-    vec2 m = vec2(u_mouse.x * aspect, u_mouse.y);
-    vec2 delta = p - m;
 
-    // 3. Silky Smooth Organic Fluid Falloff (Zero Grain, Zero Noise Static)
-    // Elongate softly along cursor motion
-    vec2 vel = vec2(u_mouse_vel.x * aspect, u_mouse_vel.y);
-    float speed = clamp(u_speed, 0.0, 1.0);
-    vec2 d_soft = delta - vel * 0.18;
-    float dist = length(d_soft);
+    // 3. Mathematical Union of Fluid Brush Stroke Segments (Seamless ribbon)
+    vec2 p0 = vec2(u_trail[0].x * aspect, u_trail[0].y);
+    float min_dist = length(p - p0) - u_trail_radii[0];
 
-    // Large generous radius with ultra-soft, buttery Gaussian-like falloff
-    float radius_outer = 0.38 + speed * 0.08;
-    float radius_inner = 0.08;
-    float smooth_reveal = smoothstep(radius_outer, radius_inner, dist) * u_hover;
+    for (int i = 0; i < 7; i++) {
+      vec2 a = vec2(u_trail[i].x * aspect, u_trail[i].y);
+      vec2 b = vec2(u_trail[i + 1].x * aspect, u_trail[i + 1].y);
+      float d_seg = distToTaperedSegment(p, a, b, u_trail_radii[i], u_trail_radii[i + 1]);
+      min_dist = min(min_dist, d_seg);
+    }
 
-    // 4. Slideshow Transition Wavefront (Particle dust on slide change)
+    // 4. Fluid Ink Bleed & Capillary Diffusion Dynamics:
+    // Organic stream turbulence along the stroke boundary like ink bleeding into water
+    vec2 fluid_curl = curlNoise(p * 3.2 + u_time * 0.25);
+    float ink_bleed = fbm(p * 5.2 - fluid_curl * 0.5 + u_time * 0.12) * 0.075;
+    float d_fluid_ink = min_dist - ink_bleed;
+
+    // 5. Painterly Ink Wash Opacity Falloff:
+    // Wide open core (fully revealed vivid photo) with soft watercolor bleed at boundary
+    float ink_reveal = smoothstep(0.08, -0.06, d_fluid_ink) * u_hover;
+
+    // Subtle watercolor wash edge highlight (no harsh lines, pure organic blend)
+    float wash_rim = smoothstep(0.0, 0.45, ink_reveal) * smoothstep(0.92, 0.45, ink_reveal);
+    vec3 wash_tone = vec3(0.98, 0.96, 0.92) * (wash_rim * 0.14 * u_hover);
+
+    // 6. Slideshow Transition Wavefront
     float slide_n = fbm(v_uv * 18.0 + vec2(u_progress * 1.5, 0.0));
     float slide_grain = hash(v_uv * 600.0 + u_progress * 40.0);
     float sweep = u_progress * 1.4 - 0.2;
@@ -109,11 +143,10 @@ const FRAGMENT_SHADER_SRC = `
     float dustZone = smoothstep(0.18, 0.0, distToEdge) * sin(u_progress * 3.14159265);
     vec2 dustOffset = vec2(slide_grain * 0.05 + dustZone * 0.03, (slide_grain - 0.5) * 0.03) * dustZone;
 
-    // 5. Texture Samples:
+    // 7. Base Monochrome Texture
     vec4 col0_mono = texture2D(u_tex0, uv0 + dustOffset);
     vec4 col1_mono = texture2D(u_tex1, uv1);
 
-    // Monochrome base tone
     float gray0 = dot(col0_mono.rgb, vec3(0.299, 0.587, 0.114));
     float gray1 = dot(col1_mono.rgb, vec3(0.299, 0.587, 0.114));
     vec3 mono0 = vec3(gray0 * 1.15, gray0 * 1.12, gray0 * 1.08);
@@ -123,18 +156,20 @@ const FRAGMENT_SHADER_SRC = `
     float spark = slide_grain * dustZone * 0.3;
     vec3 base_mono = mix(mono1, mono0, slide_mask) + vec3(spark);
 
-    // 6. 100% PURE, CRISP, ORIGINAL PHOTOGRAPH COLOR (Zero blur, zero distortion)
+    // 8. 100% PURE, PIN-SHARP ORIGINAL PHOTOGRAPH COLORS
     vec4 col0_color = texture2D(u_tex0, uv0);
     vec4 col1_color = texture2D(u_tex1, uv1);
     vec3 pure_original_color = mix(col1_color.rgb, col0_color.rgb, slide_mask);
 
-    // 7. Silky Smooth Transition
-    vec3 final_rgb = mix(base_mono, pure_original_color, smooth_reveal);
-    float final_alpha = mix(0.28, 0.95, smooth_reveal);
+    // 9. Final Composition
+    vec3 final_rgb = mix(base_mono, pure_original_color, ink_reveal) + wash_tone;
+    float final_alpha = mix(0.28, 0.96, ink_reveal);
 
     gl_FragColor = vec4(final_rgb, final_alpha);
   }
 `;
+
+const TRAIL_COUNT = 8;
 
 export default function HeroShaderSlideshow({
   images,
@@ -188,9 +223,8 @@ export default function HeroShaderSlideshow({
     const uResolution = gl.getUniformLocation(program, "u_resolution");
     const uImageRes0 = gl.getUniformLocation(program, "u_image_res0");
     const uImageRes1 = gl.getUniformLocation(program, "u_image_res1");
-    const uMouse = gl.getUniformLocation(program, "u_mouse");
-    const uMouseVel = gl.getUniformLocation(program, "u_mouse_vel");
-    const uSpeed = gl.getUniformLocation(program, "u_speed");
+    const uTrail = gl.getUniformLocation(program, "u_trail");
+    const uTrailRadii = gl.getUniformLocation(program, "u_trail_radii");
     const uHover = gl.getUniformLocation(program, "u_hover");
     const uTime = gl.getUniformLocation(program, "u_time");
 
@@ -230,15 +264,15 @@ export default function HeroShaderSlideshow({
     let lastSwitchTime = performance.now();
     let animationFrameId: number;
 
-    // --- Interactive Mouse Physics State ---
+    // --- Dynamic Fluid Calligraphy Trail Physics ---
     let targetMouseX = 0.5;
     let targetMouseY = 0.5;
-    let currentMouseX = 0.5;
-    let currentMouseY = 0.5;
-    let prevMouseX = 0.5;
-    let prevMouseY = 0.5;
-    let mouseVelX = 0;
-    let mouseVelY = 0;
+    const trail = Array.from({ length: TRAIL_COUNT }, () => ({ x: 0.5, y: 0.5 }));
+    const trailBuffer = new Float32Array(TRAIL_COUNT * 2);
+    const trailRadiiBuffer = new Float32Array(TRAIL_COUNT);
+
+    let prevHeadX = 0.5;
+    let prevHeadY = 0.5;
     let smoothSpeed = 0.0;
     let targetHover = 0.0;
     let currentHover = 0.0;
@@ -264,10 +298,12 @@ export default function HeroShaderSlideshow({
         targetHover = 1.0;
 
         if (!hasEntered) {
-          currentMouseX = targetMouseX;
-          currentMouseY = targetMouseY;
-          prevMouseX = targetMouseX;
-          prevMouseY = targetMouseY;
+          for (let i = 0; i < TRAIL_COUNT; i++) {
+            trail[i].x = targetMouseX;
+            trail[i].y = targetMouseY;
+          }
+          prevHeadX = targetMouseX;
+          prevHeadY = targetMouseY;
           hasEntered = true;
         }
       } else {
@@ -306,25 +342,41 @@ export default function HeroShaderSlideshow({
 
       resize();
 
-      // Fluid spring physics for cursor tracking
+      // Fluid Spring Physics for Calligraphy Ribbon
       const dt = Math.min((now - lastPhysicsTime) / 1000, 0.1);
       lastPhysicsTime = now;
 
-      currentMouseX += (targetMouseX - currentMouseX) * 0.16;
-      currentMouseY += (targetMouseY - currentMouseY) * 0.16;
+      // Head chases target with fluid ease
+      trail[0].x += (targetMouseX - trail[0].x) * 0.24;
+      trail[0].y += (targetMouseY - trail[0].y) * 0.24;
 
-      const vx = (currentMouseX - prevMouseX) / (dt || 0.016);
-      const vy = (currentMouseY - prevMouseY) / (dt || 0.016);
-      prevMouseX = currentMouseX;
-      prevMouseY = currentMouseY;
+      // Trailing nodes flow along trajectory with fluid viscosity
+      for (let i = 1; i < TRAIL_COUNT; i++) {
+        const lag = Math.max(0.14, 0.36 - i * 0.032);
+        trail[i].x += (trail[i - 1].x - trail[i].x) * lag;
+        trail[i].y += (trail[i - 1].y - trail[i].y) * lag;
+      }
 
-      mouseVelX += (vx - mouseVelX) * 0.22;
-      mouseVelY += (vy - mouseVelY) * 0.22;
+      // Velocity calculation
+      const vx = (trail[0].x - prevHeadX) / (dt || 0.016);
+      const vy = (trail[0].y - prevHeadY) / (dt || 0.016);
+      prevHeadX = trail[0].x;
+      prevHeadY = trail[0].y;
 
-      const rawSpeed = Math.min(Math.hypot(vx, vy) * 0.22, 1.0);
-      smoothSpeed += (rawSpeed - smoothSpeed) * 0.15;
+      const rawSpeed = Math.min(Math.hypot(vx, vy) * 0.25, 1.0);
+      smoothSpeed += (rawSpeed - smoothSpeed) * 0.16;
 
       currentHover += (targetHover - currentHover) * 0.08;
+
+      // Wide, generous stroke radius (~0.38 aspect-space, approx 450px wide sweep!)
+      const baseRadius = 0.38 + smoothSpeed * 0.08;
+      for (let i = 0; i < TRAIL_COUNT; i++) {
+        const t = i / (TRAIL_COUNT - 1);
+        // Wide sweeping stroke that gently tapers at the tail end
+        trailRadiiBuffer[i] = baseRadius * (1.0 - Math.pow(t, 1.35) * 0.62);
+        trailBuffer[i * 2] = trail[i].x;
+        trailBuffer[i * 2 + 1] = trail[i].y;
+      }
 
       let smoothProgress = 0.0;
 
@@ -368,9 +420,8 @@ export default function HeroShaderSlideshow({
       gl.uniform2f(uResolution, canvas!.width, canvas!.height);
       gl.uniform2f(uImageRes0, imageResolutions[currentIndex][0], imageResolutions[currentIndex][1]);
       gl.uniform2f(uImageRes1, imageResolutions[nextIndex][0], imageResolutions[nextIndex][1]);
-      gl.uniform2f(uMouse, currentMouseX, currentMouseY);
-      gl.uniform2f(uMouseVel, mouseVelX, mouseVelY);
-      gl.uniform1f(uSpeed, smoothSpeed);
+      gl.uniform2fv(uTrail, trailBuffer);
+      gl.uniform1fv(uTrailRadii, trailRadiiBuffer);
       gl.uniform1f(uHover, currentHover);
       gl.uniform1f(uTime, (now * 0.001) % 1000.0);
 
