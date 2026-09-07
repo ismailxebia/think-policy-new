@@ -109,7 +109,7 @@ const FRAGMENT_SHADER_SRC = `
     float aspect = u_resolution.x / u_resolution.y;
     vec2 p = vec2(v_uv.x * aspect, v_uv.y);
 
-    // 3. Mathematical Union of Fluid Brush Stroke Segments (Seamless ribbon)
+    // 3. Mathematical Union of Fluid Brush Stroke Segments
     vec2 p0 = vec2(u_trail[0].x * aspect, u_trail[0].y);
     float min_dist = length(p - p0) - u_trail_radii[0];
 
@@ -120,19 +120,18 @@ const FRAGMENT_SHADER_SRC = `
       min_dist = min(min_dist, d_seg);
     }
 
-    // 4. Fluid Ink Bleed & Capillary Diffusion Dynamics:
-    // Organic stream turbulence along the stroke boundary like ink bleeding into water
+    // 4. Fluid Ink Bleed & Capillary Diffusion Dynamics
     vec2 fluid_curl = curlNoise(p * 3.2 + u_time * 0.25);
-    float ink_bleed = fbm(p * 5.2 - fluid_curl * 0.5 + u_time * 0.12) * 0.075;
+    float ink_bleed = fbm(p * 5.2 - fluid_curl * 0.5 + u_time * 0.12) * 0.055;
     float d_fluid_ink = min_dist - ink_bleed;
 
-    // 5. Painterly Ink Wash Opacity Falloff:
-    // Wide open core (fully revealed vivid photo) with soft watercolor bleed at boundary
-    float ink_reveal = smoothstep(0.08, -0.06, d_fluid_ink) * u_hover;
+    // 5. Painterly Ink Wash Opacity Falloff
+    // u_hover naturally scales to 0 when idle so it closes completely
+    float ink_reveal = smoothstep(0.06, -0.04, d_fluid_ink) * u_hover;
 
-    // Subtle watercolor wash edge highlight (no harsh lines, pure organic blend)
+    // Subtle watercolor wash edge highlight
     float wash_rim = smoothstep(0.0, 0.45, ink_reveal) * smoothstep(0.92, 0.45, ink_reveal);
-    vec3 wash_tone = vec3(0.98, 0.96, 0.92) * (wash_rim * 0.14 * u_hover);
+    vec3 wash_tone = vec3(0.98, 0.96, 0.92) * (wash_rim * 0.12 * u_hover);
 
     // 6. Slideshow Transition Wavefront
     float slide_n = fbm(v_uv * 18.0 + vec2(u_progress * 1.5, 0.0));
@@ -276,6 +275,7 @@ export default function HeroShaderSlideshow({
     let smoothSpeed = 0.0;
     let targetHover = 0.0;
     let currentHover = 0.0;
+    let motionEnergy = 0.0; // Dynamic motion energy: 0 when idle/stopped, ramps up to 1 when moving
     let hasEntered = false;
     let lastPhysicsTime = performance.now();
 
@@ -363,17 +363,31 @@ export default function HeroShaderSlideshow({
       prevHeadX = trail[0].x;
       prevHeadY = trail[0].y;
 
-      const rawSpeed = Math.min(Math.hypot(vx, vy) * 0.25, 1.0);
-      smoothSpeed += (rawSpeed - smoothSpeed) * 0.16;
+      const rawSpeed = Math.hypot(vx, vy);
+      smoothSpeed += (Math.min(rawSpeed * 0.25, 1.0) - smoothSpeed) * 0.16;
 
-      currentHover += (targetHover - currentHover) * 0.08;
+      // --- Kinetic Motion Energy & Idle Decay Math ---
+      // When moving: motionEnergy quickly ramps up to 1.0
+      // When stationary (idle): motionEnergy progressively decays and shrinks to 0 (closes completely)
+      if (rawSpeed > 0.012 && targetHover > 0) {
+        // Active movement: energize reveal area
+        const boost = Math.min(rawSpeed * 3.5, 1.0);
+        motionEnergy = Math.min(1.0, motionEnergy + boost * 0.25 + 0.06);
+      } else {
+        // Idle / stationary: gracefully shrink and close over ~1.4 seconds
+        motionEnergy = Math.max(0.0, motionEnergy - dt * 0.72);
+      }
 
-      // Wide, generous stroke radius (~0.38 aspect-space, approx 450px wide sweep!)
-      const baseRadius = 0.38 + smoothSpeed * 0.08;
+      currentHover += (targetHover - currentHover) * 0.1;
+      const effectiveHover = currentHover * motionEnergy;
+
+      // Balanced reveal radius (not too large, focused and elegant)
+      // When cursor stops, baseRadius shrinks to 0 along with motionEnergy
+      const baseRadius = (0.22 + smoothSpeed * 0.06) * motionEnergy;
+
       for (let i = 0; i < TRAIL_COUNT; i++) {
         const t = i / (TRAIL_COUNT - 1);
-        // Wide sweeping stroke that gently tapers at the tail end
-        trailRadiiBuffer[i] = baseRadius * (1.0 - Math.pow(t, 1.35) * 0.62);
+        trailRadiiBuffer[i] = Math.max(0.0, baseRadius * (1.0 - Math.pow(t, 1.35) * 0.65));
         trailBuffer[i * 2] = trail[i].x;
         trailBuffer[i * 2 + 1] = trail[i].y;
       }
@@ -422,7 +436,7 @@ export default function HeroShaderSlideshow({
       gl.uniform2f(uImageRes1, imageResolutions[nextIndex][0], imageResolutions[nextIndex][1]);
       gl.uniform2fv(uTrail, trailBuffer);
       gl.uniform1fv(uTrailRadii, trailRadiiBuffer);
-      gl.uniform1f(uHover, currentHover);
+      gl.uniform1f(uHover, effectiveHover);
       gl.uniform1f(uTime, (now * 0.001) % 1000.0);
 
       gl.drawArrays(gl.TRIANGLES, 0, 6);
