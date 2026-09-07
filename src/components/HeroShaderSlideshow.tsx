@@ -33,14 +33,9 @@ const FRAGMENT_SHADER_SRC = `
   uniform float u_hover;
   uniform float u_time;
 
-  // --- HASH & NOISE FUNCTIONS ---
+  // Procedural noise for the slideshow transition
   float hash(vec2 p) {
     return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
-  }
-
-  vec2 hash22(vec2 p) {
-    p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
-    return fract(sin(p) * 43758.5453123);
   }
 
   float noise(vec2 p) {
@@ -54,7 +49,6 @@ const FRAGMENT_SHADER_SRC = `
     return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
   }
 
-  // --- 4-OCTAVE FRACTAL BROWNIAN MOTION (FBM) ---
   float fbm(vec2 p) {
     float v = 0.0;
     float a = 0.5;
@@ -67,36 +61,7 @@ const FRAGMENT_SHADER_SRC = `
     return v;
   }
 
-  // --- 2D CURL NOISE FOR FLUID WIND EDDIES ---
-  vec2 curlNoise(vec2 p) {
-    const float eps = 0.015;
-    float n1 = noise(p + vec2(0.0, eps));
-    float n2 = noise(p - vec2(0.0, eps));
-    float n3 = noise(p + vec2(eps, 0.0));
-    float n4 = noise(p - vec2(eps, 0.0));
-    float dy = (n1 - n2) / (2.0 * eps);
-    float dx = (n3 - n4) / (2.0 * eps);
-    return vec2(dy, -dx);
-  }
-
-  // --- 3x3 CELLULAR NOISE FOR DISCRETE SAND GRAINS ---
-  float voronoiGrains(vec2 p) {
-    vec2 n = floor(p);
-    vec2 f = fract(p);
-    float md = 8.0;
-    for (int j = -1; j <= 1; ++j) {
-      for (int i = -1; i <= 1; ++i) {
-        vec2 g = vec2(float(i), float(j));
-        vec2 o = hash22(n + g);
-        vec2 r = g + o - f;
-        float d = dot(r, r);
-        md = min(md, d);
-      }
-    }
-    return sqrt(md);
-  }
-
-  // --- EXACT OBJECT-FIT COVER UV ---
+  // Exact object-fit cover UV calculation (preserves authentic aspect ratio)
   vec2 getCoverUV(vec2 uv, vec2 screenRes, vec2 imgRes) {
     float screenAspect = screenRes.x / screenRes.y;
     float imgAspect = imgRes.x / imgRes.y;
@@ -113,7 +78,7 @@ const FRAGMENT_SHADER_SRC = `
   }
 
   void main() {
-    // 1. Exact, pin-sharp texture UV coordinates (zero distortion on image content!)
+    // 1. Exact, pin-sharp texture UV coordinates (zero distortion on image content)
     vec2 uv0 = getCoverUV(v_uv, u_resolution, u_image_res0);
     vec2 uv1 = getCoverUV(v_uv, u_resolution, u_image_res1);
 
@@ -123,50 +88,19 @@ const FRAGMENT_SHADER_SRC = `
     vec2 m = vec2(u_mouse.x * aspect, u_mouse.y);
     vec2 delta = p - m;
 
-    // 3. Dynamic Fluid Wind & Swirling Eddy Vector Field
+    // 3. Silky Smooth Organic Fluid Falloff (Zero Grain, Zero Noise Static)
+    // Elongate softly along cursor motion
     vec2 vel = vec2(u_mouse_vel.x * aspect, u_mouse_vel.y);
     float speed = clamp(u_speed, 0.0, 1.0);
+    vec2 d_soft = delta - vel * 0.18;
+    float dist = length(d_soft);
 
-    // Fluid turbulence eddies blowing the sand
-    vec2 curl = curlNoise(p * 3.8 + u_time * 0.4);
-    float turb1 = fbm(p * 5.0 - vec2(u_time * 0.3, u_time * 0.2));
-    float turb2 = fbm(p * 12.0 + curl * 0.5 + u_time * 0.5);
+    // Large generous radius with ultra-soft, buttery Gaussian-like falloff
+    float radius_outer = 0.38 + speed * 0.08;
+    float radius_inner = 0.08;
+    float smooth_reveal = smoothstep(radius_outer, radius_inner, dist) * u_hover;
 
-    // Directional wind wake from cursor movement
-    vec2 wind = vel * (0.25 + speed * 0.45) + curl * (0.08 + speed * 0.12);
-    
-    // Deform coordinate space against blowing wind
-    vec2 p_blown = delta - wind;
-    float dist_blown = length(p_blown);
-
-    // Fluid sand density threshold (expands naturally with speed)
-    float base_radius = 0.34 + speed * 0.14;
-    float fluid_density = smoothstep(base_radius, 0.04, dist_blown);
-
-    // 4. Multi-Scale Stochastic Sand & Dust Particles
-    // Macro sand grain clusters:
-    float grain_macro = voronoiGrains(p * 28.0 + curl * 1.5 - u_time * 0.2);
-    // Micro sand dust specks:
-    float grain_micro = hash(floor(p * 420.0 + u_time * 8.0));
-    // Mid-frequency fluid dust plumes:
-    float dust_plumes = turb1 * 0.6 + turb2 * 0.4;
-
-    // Total granular dispersion metric
-    float sand_dispersion = fluid_density * 1.6
-      - (dust_plumes * 0.65)
-      - (grain_macro * 0.35)
-      - (grain_micro * 0.25);
-
-    // Reveal mask: smoothly transitions as sand grains blow away
-    // (Notice: no rigid circle! It disperses organically grain by grain!)
-    float reveal_mask = smoothstep(0.15, 0.85, sand_dispersion) * u_hover;
-
-    // 5. Blowing Sand Grains & Golden Dust Sparkles along the dispersion boundary
-    float edge_zone = smoothstep(0.05, 0.55, sand_dispersion) * smoothstep(1.05, 0.55, sand_dispersion);
-    float sand_particles = pow(grain_micro, 5.0) * edge_zone * 2.2 * u_hover;
-    float sand_dust_cloud = pow(grain_macro, 2.0) * edge_zone * 0.45 * u_hover;
-
-    // 6. Base Slideshow Particle Transition Math
+    // 4. Slideshow Transition Wavefront (Particle dust on slide change)
     float slide_n = fbm(v_uv * 18.0 + vec2(u_progress * 1.5, 0.0));
     float slide_grain = hash(v_uv * 600.0 + u_progress * 40.0);
     float sweep = u_progress * 1.4 - 0.2;
@@ -175,8 +109,7 @@ const FRAGMENT_SHADER_SRC = `
     float dustZone = smoothstep(0.18, 0.0, distToEdge) * sin(u_progress * 3.14159265);
     vec2 dustOffset = vec2(slide_grain * 0.05 + dustZone * 0.03, (slide_grain - 0.5) * 0.03) * dustZone;
 
-    // 7. Texture Samples:
-    // Pure, pin-sharp samples with zero pixel distortion!
+    // 5. Texture Samples:
     vec4 col0_mono = texture2D(u_tex0, uv0 + dustOffset);
     vec4 col1_mono = texture2D(u_tex1, uv1);
 
@@ -190,21 +123,14 @@ const FRAGMENT_SHADER_SRC = `
     float spark = slide_grain * dustZone * 0.3;
     vec3 base_mono = mix(mono1, mono0, slide_mask) + vec3(spark);
 
-    // 8. 100% PURE, CRISP, ORIGINAL PHOTOGRAPH COLOR
+    // 6. 100% PURE, CRISP, ORIGINAL PHOTOGRAPH COLOR (Zero blur, zero distortion)
     vec4 col0_color = texture2D(u_tex0, uv0);
     vec4 col1_color = texture2D(u_tex1, uv1);
     vec3 pure_original_color = mix(col1_color.rgb, col0_color.rgb, slide_mask);
 
-    // 9. Sand / Dust Color Accents at the dispersing boundary
-    vec3 dust_tone = vec3(0.92, 0.86, 0.78) * sand_dust_cloud;
-    vec3 sparkle_tone = vec3(1.0, 0.98, 0.92) * sand_particles;
-
-    // Final Composition:
-    // - Black & white hero background
-    // - Sand grains & fluid dust blowing at the edge
-    // - Pure, crystal-clear color revealed where sand has cleared!
-    vec3 final_rgb = mix(base_mono, pure_original_color, reveal_mask) + dust_tone + sparkle_tone;
-    float final_alpha = mix(0.28, 0.96, reveal_mask);
+    // 7. Silky Smooth Transition
+    vec3 final_rgb = mix(base_mono, pure_original_color, smooth_reveal);
+    float final_alpha = mix(0.28, 0.95, smooth_reveal);
 
     gl_FragColor = vec4(final_rgb, final_alpha);
   }
@@ -384,19 +310,19 @@ export default function HeroShaderSlideshow({
       const dt = Math.min((now - lastPhysicsTime) / 1000, 0.1);
       lastPhysicsTime = now;
 
-      currentMouseX += (targetMouseX - currentMouseX) * 0.18;
-      currentMouseY += (targetMouseY - currentMouseY) * 0.18;
+      currentMouseX += (targetMouseX - currentMouseX) * 0.16;
+      currentMouseY += (targetMouseY - currentMouseY) * 0.16;
 
       const vx = (currentMouseX - prevMouseX) / (dt || 0.016);
       const vy = (currentMouseY - prevMouseY) / (dt || 0.016);
       prevMouseX = currentMouseX;
       prevMouseY = currentMouseY;
 
-      mouseVelX += (vx - mouseVelX) * 0.25;
-      mouseVelY += (vy - mouseVelY) * 0.25;
+      mouseVelX += (vx - mouseVelX) * 0.22;
+      mouseVelY += (vy - mouseVelY) * 0.22;
 
-      const rawSpeed = Math.min(Math.hypot(vx, vy) * 0.25, 1.0);
-      smoothSpeed += (rawSpeed - smoothSpeed) * 0.16;
+      const rawSpeed = Math.min(Math.hypot(vx, vy) * 0.22, 1.0);
+      smoothSpeed += (rawSpeed - smoothSpeed) * 0.15;
 
       currentHover += (targetHover - currentHover) * 0.08;
 
