@@ -27,14 +27,13 @@ const FRAGMENT_SHADER_SRC = `
   uniform vec2 u_resolution;
   uniform vec2 u_image_res0;
   uniform vec2 u_image_res1;
-  uniform vec2 u_head_pos;
-  uniform float u_head_rad;
-  uniform vec2 u_splats_pos[8];
-  uniform float u_splats_rad[8];
+  uniform vec2 u_mouse;
+  uniform vec2 u_mouse_vel;
   uniform float u_hover;
+  uniform float u_motion; // 1.0 = actively moving, 0.0 = resting / stationary
   uniform float u_time;
 
-  // --- PROCEDURAL NOISE & FBM ---
+  // --- HASH & PROCEDURAL NOISE ---
   float hash(vec2 p) {
     return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
   }
@@ -50,21 +49,22 @@ const FRAGMENT_SHADER_SRC = `
     return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
   }
 
+  // --- 3-OCTAVE FRACTAL BROWNIAN MOTION (FBM) ---
   float fbm(vec2 p) {
     float v = 0.0;
     float a = 0.5;
     mat2 rot = mat2(0.8, 0.6, -0.6, 0.8);
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < 3; ++i) {
       v += a * noise(p);
-      p = rot * p * 2.04 + vec2(11.3);
+      p = rot * p * 2.02 + vec2(10.0);
       a *= 0.5;
     }
     return v;
   }
 
-  // Incompressible 2D Curl Noise for fluid stream bleeding
+  // --- CURL NOISE VECTOR FIELD FOR FLUID TURBULENCE ---
   vec2 curlNoise(vec2 p) {
-    const float eps = 0.015;
+    const float eps = 0.01;
     float n1 = noise(p + vec2(0.0, eps));
     float n2 = noise(p - vec2(0.0, eps));
     float n3 = noise(p + vec2(eps, 0.0));
@@ -74,7 +74,7 @@ const FRAGMENT_SHADER_SRC = `
     return vec2(dy, -dx);
   }
 
-  // Exact object-fit cover UV calculation
+  // --- EXACT OBJECT-FIT COVER UV CALCULATION ---
   vec2 getCoverUV(vec2 uv, vec2 screenRes, vec2 imgRes) {
     float screenAspect = screenRes.x / screenRes.y;
     float imgAspect = imgRes.x / imgRes.y;
@@ -91,82 +91,102 @@ const FRAGMENT_SHADER_SRC = `
   }
 
   void main() {
-    // 1. Exact, pin-sharp UV coordinates (zero blur on image)
+    // 1. Aspect-Ratio Corrected UVs for texture sampling
     vec2 uv0 = getCoverUV(v_uv, u_resolution, u_image_res0);
     vec2 uv1 = getCoverUV(v_uv, u_resolution, u_image_res1);
 
-    // 2. Aspect-Ratio Corrected Metric Space
+    // 2. Aspect-Ratio Corrected Coordinates for Isotropic Radius
     float aspect = u_resolution.x / u_resolution.y;
-    vec2 p = vec2(v_uv.x * aspect, v_uv.y);
+    vec2 p_aspect = vec2(v_uv.x * aspect, v_uv.y);
+    vec2 mouse_aspect = vec2(u_mouse.x * aspect, u_mouse.y);
+    vec2 d_vec = p_aspect - mouse_aspect;
+    float d_raw = length(d_vec);
 
-    // 3. Distance to Active Cursor Head
-    vec2 head_aspect = vec2(u_head_pos.x * aspect, u_head_pos.y);
-    float min_dist = length(p - head_aspect) - u_head_rad;
+    // Motion factor: when cursor is stationary (u_motion -> 0.0), distortion decays to zero
+    float m = clamp(u_motion, 0.0, 1.0);
 
-    // 4. Distance to Static Deposited Ink Stamps in Space (Pinned where drawn)
-    for (int i = 0; i < 8; i++) {
-      if (u_splats_rad[i] > 0.001) {
-        vec2 s_aspect = vec2(u_splats_pos[i].x * aspect, u_splats_pos[i].y);
-        float d_s = length(p - s_aspect) - u_splats_rad[i];
-        min_dist = min(min_dist, d_s);
-      }
-    }
+    // 3. Fluid Domain Warping & Curl Vector Distortions (decays when stationary)
+    vec2 curl = curlNoise(p_aspect * 3.5 + u_time * 0.25);
+    float turb = fbm(p_aspect * 4.0 - vec2(u_time * 0.2, u_time * 0.1));
+    float warp_amplitude = 0.006 + 0.032 * m;
 
-    // 5. Fluid Ink Bleed & Capillary Diffusion Dynamics
-    vec2 fluid_curl = curlNoise(p * 3.2 + u_time * 0.25);
-    float ink_bleed = fbm(p * 4.8 - fluid_curl * 0.4 + u_time * 0.12) * 0.055;
-    float d_fluid_ink = min_dist - ink_bleed;
+    // Comet velocity wake stretch (only while moving)
+    vec2 vel_aspect = vec2(u_mouse_vel.x * aspect, u_mouse_vel.y);
+    float vel_len = length(vel_aspect);
+    vec2 vel_dir = vel_len > 0.0001 ? vel_aspect / vel_len : vec2(0.0);
+    float vel_dot = dot(normalize(d_vec + 0.0001), -vel_dir);
+    float wake_stretch = clamp(vel_len * 0.10, 0.0, 0.04) * smoothstep(0.0, 1.0, vel_dot) * m;
 
-    // 6. Painterly Ink Wash Opacity Falloff
-    float ink_reveal = smoothstep(0.06, -0.05, d_fluid_ink) * u_hover;
+    // Breathing harmonic (gentle and subtle)
+    float breathing = 0.006 * sin(u_time * 1.5 + d_raw * 6.0) * m;
+    float warped_dist = d_raw - ((turb * 0.6 + curl.x * 0.4) * warp_amplitude + breathing - wake_stretch);
 
-    // Subtle watercolor wash edge highlight
-    float wash_rim = smoothstep(0.0, 0.45, ink_reveal) * smoothstep(0.92, 0.45, ink_reveal);
-    vec3 wash_tone = vec3(0.98, 0.96, 0.92) * (wash_rim * 0.12 * u_hover);
+    // Generous, smooth lens radius
+    float base_radius = 0.36;
+    float reveal_mask = smoothstep(base_radius, base_radius * 0.22, warped_dist) * u_hover;
 
-    // 7. Slideshow Transition Wavefront
-    float slide_n = fbm(v_uv * 18.0 + vec2(u_progress * 1.5, 0.0));
-    float slide_grain = hash(v_uv * 600.0 + u_progress * 40.0);
+    // Subtle edge rim light (only gentle accent when moving, very soft when still)
+    float rim_zone = abs(warped_dist - base_radius * 0.75);
+    float rim_glow = exp(-pow(rim_zone / 0.035, 2.0)) * 0.20 * u_hover * (0.15 + 0.85 * m);
+
+    // Subtle optical ripple only during motion
+    float ripple = sin(warped_dist * 26.0 - u_time * 4.0) * exp(-warped_dist * 4.0) * 0.005 * m * u_hover;
+
+    // 4. Clean Refraction & Chromatic Dispersion:
+    // When stationary (m -> 0.0): dispersion is ZERO -> crystal clear, razor sharp original photo!
+    // When moving: delicate prismatic shimmer without heavy rainbow smears
+    vec2 radial_dir = d_raw > 0.001 ? normalize(d_vec) : vec2(0.0);
+    float dispersion_amt = (reveal_mask * 0.0016 + ripple) * m;
+    vec2 lens_dispersion = radial_dir * dispersion_amt;
+
+    // Sample color textures with subtle chromatic aberration only during motion
+    vec4 col0_r = texture2D(u_tex0, uv0 + lens_dispersion);
+    vec4 col0_g = texture2D(u_tex0, uv0);
+    vec4 col0_b = texture2D(u_tex0, uv0 - lens_dispersion);
+    vec3 col0_color = vec3(col0_r.r, col0_g.g, col0_b.b);
+
+    vec4 col1_r = texture2D(u_tex1, uv1 + lens_dispersion);
+    vec4 col1_g = texture2D(u_tex1, uv1);
+    vec4 col1_b = texture2D(u_tex1, uv1 - lens_dispersion);
+    vec3 col1_color = vec3(col1_r.r, col1_g.g, col1_b.b);
+
+    // 5. Dust particle slideshow sweep transition
+    float n = fbm(v_uv * 18.0 + vec2(u_progress * 1.5, 0.0));
+    float grain = hash(v_uv * 600.0 + u_progress * 40.0);
     float sweep = u_progress * 1.4 - 0.2;
-    float edgeProgress = v_uv.x + (slide_n * 0.22 + slide_grain * 0.08) - 0.15;
+    float edgeProgress = v_uv.x + (n * 0.22 + grain * 0.08) - 0.15;
     float distToEdge = abs(v_uv.x - u_progress);
     float dustZone = smoothstep(0.18, 0.0, distToEdge) * sin(u_progress * 3.14159265);
-    vec2 dustOffset = vec2(slide_grain * 0.05 + dustZone * 0.03, (slide_grain - 0.5) * 0.03) * dustZone;
+    vec2 dustOffset = vec2(grain * 0.05 + dustZone * 0.03, (grain - 0.5) * 0.03) * dustZone;
 
-    // 8. Base Monochrome Texture
-    vec4 col0_mono = texture2D(u_tex0, uv0 + dustOffset);
-    vec4 col1_mono = texture2D(u_tex1, uv1);
+    // Monochrome base sample
+    vec4 col0_base = texture2D(u_tex0, uv0 + dustOffset);
+    vec4 col1_base = texture2D(u_tex1, uv1);
 
-    float gray0 = dot(col0_mono.rgb, vec3(0.299, 0.587, 0.114));
-    float gray1 = dot(col1_mono.rgb, vec3(0.299, 0.587, 0.114));
+    float gray0 = dot(col0_base.rgb, vec3(0.299, 0.587, 0.114));
+    float gray1 = dot(col1_base.rgb, vec3(0.299, 0.587, 0.114));
     vec3 mono0 = vec3(gray0 * 1.15, gray0 * 1.12, gray0 * 1.08);
     vec3 mono1 = vec3(gray1 * 1.15, gray1 * 1.12, gray1 * 1.08);
 
     float slide_mask = smoothstep(sweep - 0.06, sweep + 0.06, edgeProgress);
-    float spark = slide_grain * dustZone * 0.3;
+    float spark = grain * dustZone * 0.3;
+
     vec3 base_mono = mix(mono1, mono0, slide_mask) + vec3(spark);
+    vec3 active_color = mix(col1_color, col0_color, slide_mask);
 
-    // 9. 100% PURE, PIN-SHARP ORIGINAL PHOTOGRAPH COLORS
-    vec4 col0_color = texture2D(u_tex0, uv0);
-    vec4 col1_color = texture2D(u_tex1, uv1);
-    vec3 pure_original_color = mix(col1_color.rgb, col0_color.rgb, slide_mask);
+    // Clean, natural authentic photograph colors (without artificial color oversaturation)
+    vec3 clean_photo = active_color * 1.04;
+    vec3 rim_light = vec3(1.0, 0.98, 0.95) * rim_glow;
 
-    // 10. Final Composition
-    vec3 final_rgb = mix(base_mono, pure_original_color, ink_reveal) + wash_tone;
-    float final_alpha = mix(0.28, 0.96, ink_reveal);
+    // Blend between monochrome and crystal-clear original photo
+    vec3 final_rgb = mix(base_mono, clean_photo, reveal_mask) + rim_light;
+
+    // Dynamically increase opacity within reveal bubble so the true photograph shines
+    float final_alpha = mix(0.28, 0.95, reveal_mask);
 
     gl_FragColor = vec4(final_rgb, final_alpha);
   }
 `;
-
-const MAX_SPLATS = 8;
-
-interface Splat {
-  x: number;
-  y: number;
-  birth: number;
-  radius: number;
-}
 
 export default function HeroShaderSlideshow({
   images,
@@ -220,11 +240,10 @@ export default function HeroShaderSlideshow({
     const uResolution = gl.getUniformLocation(program, "u_resolution");
     const uImageRes0 = gl.getUniformLocation(program, "u_image_res0");
     const uImageRes1 = gl.getUniformLocation(program, "u_image_res1");
-    const uHeadPos = gl.getUniformLocation(program, "u_head_pos");
-    const uHeadRad = gl.getUniformLocation(program, "u_head_rad");
-    const uSplatsPos = gl.getUniformLocation(program, "u_splats_pos");
-    const uSplatsRad = gl.getUniformLocation(program, "u_splats_rad");
+    const uMouse = gl.getUniformLocation(program, "u_mouse");
+    const uMouseVel = gl.getUniformLocation(program, "u_mouse_vel");
     const uHover = gl.getUniformLocation(program, "u_hover");
+    const uMotion = gl.getUniformLocation(program, "u_motion");
     const uTime = gl.getUniformLocation(program, "u_time");
 
     const textures: WebGLTexture[] = [];
@@ -263,22 +282,20 @@ export default function HeroShaderSlideshow({
     let lastSwitchTime = performance.now();
     let animationFrameId: number;
 
-    // --- Deposited Ink Wash Physics State ---
+    // --- Interactive Mouse Physics & Motion Decay State ---
     let targetMouseX = 0.5;
     let targetMouseY = 0.5;
     let currentMouseX = 0.5;
     let currentMouseY = 0.5;
-    let prevHeadX = 0.5;
-    let prevHeadY = 0.5;
-    let lastPlacedPos = { x: 0.5, y: 0.5 };
-    let lastMoveTime = performance.now();
-
-    const splats: Splat[] = [];
-    const splatsPosBuffer = new Float32Array(MAX_SPLATS * 2);
-    const splatsRadBuffer = new Float32Array(MAX_SPLATS);
-
+    let prevMouseX = 0.5;
+    let prevMouseY = 0.5;
+    let mouseVelX = 0;
+    let mouseVelY = 0;
     let targetHover = 0.0;
     let currentHover = 0.0;
+    let targetMotion = 0.0;
+    let currentMotion = 0.0;
+    let lastMoveTime = performance.now();
     let hasEntered = false;
     let lastPhysicsTime = performance.now();
 
@@ -296,26 +313,35 @@ export default function HeroShaderSlideshow({
       ) {
         const nx = (e.clientX - cRect.left) / cRect.width;
         const ny = (e.clientY - cRect.top) / cRect.height;
-        targetMouseX = Math.max(0.0, Math.min(1.0, nx));
-        targetMouseY = Math.max(0.0, Math.min(1.0, ny));
+        const clampedX = Math.max(0.0, Math.min(1.0, nx));
+        const clampedY = Math.max(0.0, Math.min(1.0, ny));
+
+        const dist = Math.hypot(clampedX - targetMouseX, clampedY - targetMouseY);
+        targetMouseX = clampedX;
+        targetMouseY = clampedY;
         targetHover = 1.0;
+
+        // Motion impulse based on cursor speed
+        targetMotion = Math.min(dist * 35.0 + 0.2, 1.0);
         lastMoveTime = performance.now();
 
         if (!hasEntered) {
           currentMouseX = targetMouseX;
           currentMouseY = targetMouseY;
-          prevHeadX = targetMouseX;
-          prevHeadY = targetMouseY;
-          lastPlacedPos = { x: targetMouseX, y: targetMouseY };
+          prevMouseX = targetMouseX;
+          prevMouseY = targetMouseY;
           hasEntered = true;
+          targetMotion = 0.0;
         }
       } else {
         targetHover = 0.0;
+        targetMotion = 0.0;
       }
     };
 
     const handlePointerLeave = () => {
       targetHover = 0.0;
+      targetMotion = 0.0;
     };
 
     window.addEventListener("pointermove", handlePointerMove, { passive: true });
@@ -345,71 +371,32 @@ export default function HeroShaderSlideshow({
 
       resize();
 
+      // Damped spring physics for cursor tracking
       const dt = Math.min((now - lastPhysicsTime) / 1000, 0.1);
       lastPhysicsTime = now;
 
-      // Cursor head follows target smoothly
-      currentMouseX += (targetMouseX - currentMouseX) * 0.22;
-      currentMouseY += (targetMouseY - currentMouseY) * 0.22;
+      currentMouseX += (targetMouseX - currentMouseX) * 0.16;
+      currentMouseY += (targetMouseY - currentMouseY) * 0.16;
 
-      const vx = currentMouseX - prevHeadX;
-      const vy = currentMouseY - prevHeadY;
-      prevHeadX = currentMouseX;
-      prevHeadY = currentMouseY;
+      const vx = (currentMouseX - prevMouseX) / (dt || 0.016);
+      const vy = (currentMouseY - prevMouseY) / (dt || 0.016);
+      prevMouseX = currentMouseX;
+      prevMouseY = currentMouseY;
 
-      const distMoved = Math.hypot(vx, vy);
-      if (distMoved > 0.0015 && targetHover > 0) {
-        lastMoveTime = now;
+      mouseVelX += (vx - mouseVelX) * 0.22;
+      mouseVelY += (vy - mouseVelY) * 0.22;
+
+      currentHover += (targetHover - currentHover) * 0.08;
+
+      // When cursor stops moving (>100ms idle), targetMotion drops to 0.0
+      const idleTime = now - lastMoveTime;
+      if (idleTime > 100) {
+        targetMotion = 0.0;
       }
 
-      // Deposit a new ink splat at the current position if cursor moved enough
-      // Ink stays pinned where deposited! (Never slithers like a snake)
-      const distFromLastSplat = Math.hypot(currentMouseX - lastPlacedPos.x, currentMouseY - lastPlacedPos.y);
-      if (distFromLastSplat > 0.035 && targetHover > 0) {
-        splats.unshift({
-          x: currentMouseX,
-          y: currentMouseY,
-          birth: now,
-          radius: 0.20,
-        });
-        if (splats.length > MAX_SPLATS) {
-          splats.pop();
-        }
-        lastPlacedPos = { x: currentMouseX, y: currentMouseY };
-      }
-
-      // 1-second delay before fading:
-      // If idle <= 1.0s: fully open (idleFade = 1.0)
-      // If idle > 1.0s: slowly fade and shrink over 2.2 seconds
-      const idleDuration = (now - lastMoveTime) / 1000;
-      let idleFade = 1.0;
-      if (idleDuration > 1.0) {
-        const fadeProgress = Math.min((idleDuration - 1.0) / 2.2, 1.0);
-        // Smooth cubic ease-out
-        idleFade = 1.0 - fadeProgress * fadeProgress * (3.0 - 2.0 * fadeProgress);
-      }
-
-      currentHover += (targetHover - currentHover) * 0.12;
-      const effectiveHover = currentHover * idleFade;
-
-      // Base radius of the active brush under cursor (tasteful and balanced)
-      const headRadius = 0.22 * idleFade;
-
-      // Update static deposited splats (each splat ages in place and gently diffuses)
-      for (let i = 0; i < MAX_SPLATS; i++) {
-        if (i < splats.length) {
-          const age = (now - splats[i].birth) / 1000;
-          // Splat naturally lives for ~2.0s
-          const splatLife = Math.max(0.0, 1.0 - age / 2.0) * idleFade;
-          splatsPosBuffer[i * 2] = splats[i].x;
-          splatsPosBuffer[i * 2 + 1] = splats[i].y;
-          splatsRadBuffer[i] = splats[i].radius * splatLife;
-        } else {
-          splatsPosBuffer[i * 2] = 0.5;
-          splatsPosBuffer[i * 2 + 1] = 0.5;
-          splatsRadBuffer[i] = 0.0;
-        }
-      }
+      // Smooth relaxation: decay down to 0.0 when resting, quick attack when moving
+      const motionLerp = targetMotion > currentMotion ? 0.22 : 0.04;
+      currentMotion += (targetMotion - currentMotion) * motionLerp;
 
       let smoothProgress = 0.0;
 
@@ -453,12 +440,10 @@ export default function HeroShaderSlideshow({
       gl.uniform2f(uResolution, canvas!.width, canvas!.height);
       gl.uniform2f(uImageRes0, imageResolutions[currentIndex][0], imageResolutions[currentIndex][1]);
       gl.uniform2f(uImageRes1, imageResolutions[nextIndex][0], imageResolutions[nextIndex][1]);
-      
-      gl.uniform2f(uHeadPos, currentMouseX, currentMouseY);
-      gl.uniform1f(uHeadRad, headRadius);
-      gl.uniform2fv(uSplatsPos, splatsPosBuffer);
-      gl.uniform1fv(uSplatsRad, splatsRadBuffer);
-      gl.uniform1f(uHover, effectiveHover);
+      gl.uniform2f(uMouse, currentMouseX, currentMouseY);
+      gl.uniform2f(uMouseVel, mouseVelX, mouseVelY);
+      gl.uniform1f(uHover, currentHover);
+      gl.uniform1f(uMotion, currentMotion);
       gl.uniform1f(uTime, (now * 0.001) % 1000.0);
 
       gl.drawArrays(gl.TRIANGLES, 0, 6);
