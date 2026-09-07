@@ -27,8 +27,10 @@ const FRAGMENT_SHADER_SRC = `
   uniform vec2 u_resolution;
   uniform vec2 u_image_res0;
   uniform vec2 u_image_res1;
-  uniform vec2 u_trail[8];
-  uniform float u_trail_radii[8];
+  uniform vec2 u_head_pos;
+  uniform float u_head_rad;
+  uniform vec2 u_splats_pos[8];
+  uniform float u_splats_rad[8];
   uniform float u_hover;
   uniform float u_time;
 
@@ -88,18 +90,6 @@ const FRAGMENT_SHADER_SRC = `
     );
   }
 
-  // Exact Signed Distance to a Tapered Capsule / Fluid Brush Segment
-  float distToTaperedSegment(vec2 p, vec2 a, vec2 b, float ra, float rb) {
-    vec2 ba = b - a;
-    vec2 pa = p - a;
-    float l2 = dot(ba, ba);
-    if (l2 < 0.00001) return length(pa) - ra;
-    float t = clamp(dot(pa, ba) / l2, 0.0, 1.0);
-    vec2 closest = a + ba * t;
-    float r = mix(ra, rb, t);
-    return length(p - closest) - r;
-  }
-
   void main() {
     // 1. Exact, pin-sharp UV coordinates (zero blur on image)
     vec2 uv0 = getCoverUV(v_uv, u_resolution, u_image_res0);
@@ -109,31 +99,32 @@ const FRAGMENT_SHADER_SRC = `
     float aspect = u_resolution.x / u_resolution.y;
     vec2 p = vec2(v_uv.x * aspect, v_uv.y);
 
-    // 3. Mathematical Union of Fluid Brush Stroke Segments
-    vec2 p0 = vec2(u_trail[0].x * aspect, u_trail[0].y);
-    float min_dist = length(p - p0) - u_trail_radii[0];
+    // 3. Distance to Active Cursor Head
+    vec2 head_aspect = vec2(u_head_pos.x * aspect, u_head_pos.y);
+    float min_dist = length(p - head_aspect) - u_head_rad;
 
-    for (int i = 0; i < 7; i++) {
-      vec2 a = vec2(u_trail[i].x * aspect, u_trail[i].y);
-      vec2 b = vec2(u_trail[i + 1].x * aspect, u_trail[i + 1].y);
-      float d_seg = distToTaperedSegment(p, a, b, u_trail_radii[i], u_trail_radii[i + 1]);
-      min_dist = min(min_dist, d_seg);
+    // 4. Distance to Static Deposited Ink Stamps in Space (Pinned where drawn)
+    for (int i = 0; i < 8; i++) {
+      if (u_splats_rad[i] > 0.001) {
+        vec2 s_aspect = vec2(u_splats_pos[i].x * aspect, u_splats_pos[i].y);
+        float d_s = length(p - s_aspect) - u_splats_rad[i];
+        min_dist = min(min_dist, d_s);
+      }
     }
 
-    // 4. Fluid Ink Bleed & Capillary Diffusion Dynamics
+    // 5. Fluid Ink Bleed & Capillary Diffusion Dynamics
     vec2 fluid_curl = curlNoise(p * 3.2 + u_time * 0.25);
-    float ink_bleed = fbm(p * 5.2 - fluid_curl * 0.5 + u_time * 0.12) * 0.055;
+    float ink_bleed = fbm(p * 4.8 - fluid_curl * 0.4 + u_time * 0.12) * 0.055;
     float d_fluid_ink = min_dist - ink_bleed;
 
-    // 5. Painterly Ink Wash Opacity Falloff
-    // u_hover naturally scales to 0 when idle so it closes completely
-    float ink_reveal = smoothstep(0.06, -0.04, d_fluid_ink) * u_hover;
+    // 6. Painterly Ink Wash Opacity Falloff
+    float ink_reveal = smoothstep(0.06, -0.05, d_fluid_ink) * u_hover;
 
     // Subtle watercolor wash edge highlight
     float wash_rim = smoothstep(0.0, 0.45, ink_reveal) * smoothstep(0.92, 0.45, ink_reveal);
     vec3 wash_tone = vec3(0.98, 0.96, 0.92) * (wash_rim * 0.12 * u_hover);
 
-    // 6. Slideshow Transition Wavefront
+    // 7. Slideshow Transition Wavefront
     float slide_n = fbm(v_uv * 18.0 + vec2(u_progress * 1.5, 0.0));
     float slide_grain = hash(v_uv * 600.0 + u_progress * 40.0);
     float sweep = u_progress * 1.4 - 0.2;
@@ -142,7 +133,7 @@ const FRAGMENT_SHADER_SRC = `
     float dustZone = smoothstep(0.18, 0.0, distToEdge) * sin(u_progress * 3.14159265);
     vec2 dustOffset = vec2(slide_grain * 0.05 + dustZone * 0.03, (slide_grain - 0.5) * 0.03) * dustZone;
 
-    // 7. Base Monochrome Texture
+    // 8. Base Monochrome Texture
     vec4 col0_mono = texture2D(u_tex0, uv0 + dustOffset);
     vec4 col1_mono = texture2D(u_tex1, uv1);
 
@@ -155,12 +146,12 @@ const FRAGMENT_SHADER_SRC = `
     float spark = slide_grain * dustZone * 0.3;
     vec3 base_mono = mix(mono1, mono0, slide_mask) + vec3(spark);
 
-    // 8. 100% PURE, PIN-SHARP ORIGINAL PHOTOGRAPH COLORS
+    // 9. 100% PURE, PIN-SHARP ORIGINAL PHOTOGRAPH COLORS
     vec4 col0_color = texture2D(u_tex0, uv0);
     vec4 col1_color = texture2D(u_tex1, uv1);
     vec3 pure_original_color = mix(col1_color.rgb, col0_color.rgb, slide_mask);
 
-    // 9. Final Composition
+    // 10. Final Composition
     vec3 final_rgb = mix(base_mono, pure_original_color, ink_reveal) + wash_tone;
     float final_alpha = mix(0.28, 0.96, ink_reveal);
 
@@ -168,7 +159,14 @@ const FRAGMENT_SHADER_SRC = `
   }
 `;
 
-const TRAIL_COUNT = 8;
+const MAX_SPLATS = 8;
+
+interface Splat {
+  x: number;
+  y: number;
+  birth: number;
+  radius: number;
+}
 
 export default function HeroShaderSlideshow({
   images,
@@ -222,8 +220,10 @@ export default function HeroShaderSlideshow({
     const uResolution = gl.getUniformLocation(program, "u_resolution");
     const uImageRes0 = gl.getUniformLocation(program, "u_image_res0");
     const uImageRes1 = gl.getUniformLocation(program, "u_image_res1");
-    const uTrail = gl.getUniformLocation(program, "u_trail");
-    const uTrailRadii = gl.getUniformLocation(program, "u_trail_radii");
+    const uHeadPos = gl.getUniformLocation(program, "u_head_pos");
+    const uHeadRad = gl.getUniformLocation(program, "u_head_rad");
+    const uSplatsPos = gl.getUniformLocation(program, "u_splats_pos");
+    const uSplatsRad = gl.getUniformLocation(program, "u_splats_rad");
     const uHover = gl.getUniformLocation(program, "u_hover");
     const uTime = gl.getUniformLocation(program, "u_time");
 
@@ -263,19 +263,22 @@ export default function HeroShaderSlideshow({
     let lastSwitchTime = performance.now();
     let animationFrameId: number;
 
-    // --- Dynamic Fluid Calligraphy Trail Physics ---
+    // --- Deposited Ink Wash Physics State ---
     let targetMouseX = 0.5;
     let targetMouseY = 0.5;
-    const trail = Array.from({ length: TRAIL_COUNT }, () => ({ x: 0.5, y: 0.5 }));
-    const trailBuffer = new Float32Array(TRAIL_COUNT * 2);
-    const trailRadiiBuffer = new Float32Array(TRAIL_COUNT);
-
+    let currentMouseX = 0.5;
+    let currentMouseY = 0.5;
     let prevHeadX = 0.5;
     let prevHeadY = 0.5;
-    let smoothSpeed = 0.0;
+    let lastPlacedPos = { x: 0.5, y: 0.5 };
+    let lastMoveTime = performance.now();
+
+    const splats: Splat[] = [];
+    const splatsPosBuffer = new Float32Array(MAX_SPLATS * 2);
+    const splatsRadBuffer = new Float32Array(MAX_SPLATS);
+
     let targetHover = 0.0;
     let currentHover = 0.0;
-    let motionEnergy = 0.0; // Dynamic motion energy: 0 when idle/stopped, ramps up to 1 when moving
     let hasEntered = false;
     let lastPhysicsTime = performance.now();
 
@@ -296,14 +299,14 @@ export default function HeroShaderSlideshow({
         targetMouseX = Math.max(0.0, Math.min(1.0, nx));
         targetMouseY = Math.max(0.0, Math.min(1.0, ny));
         targetHover = 1.0;
+        lastMoveTime = performance.now();
 
         if (!hasEntered) {
-          for (let i = 0; i < TRAIL_COUNT; i++) {
-            trail[i].x = targetMouseX;
-            trail[i].y = targetMouseY;
-          }
+          currentMouseX = targetMouseX;
+          currentMouseY = targetMouseY;
           prevHeadX = targetMouseX;
           prevHeadY = targetMouseY;
+          lastPlacedPos = { x: targetMouseX, y: targetMouseY };
           hasEntered = true;
         }
       } else {
@@ -342,54 +345,70 @@ export default function HeroShaderSlideshow({
 
       resize();
 
-      // Fluid Spring Physics for Calligraphy Ribbon
       const dt = Math.min((now - lastPhysicsTime) / 1000, 0.1);
       lastPhysicsTime = now;
 
-      // Head chases target with fluid ease
-      trail[0].x += (targetMouseX - trail[0].x) * 0.24;
-      trail[0].y += (targetMouseY - trail[0].y) * 0.24;
+      // Cursor head follows target smoothly
+      currentMouseX += (targetMouseX - currentMouseX) * 0.22;
+      currentMouseY += (targetMouseY - currentMouseY) * 0.22;
 
-      // Trailing nodes flow along trajectory with fluid viscosity
-      for (let i = 1; i < TRAIL_COUNT; i++) {
-        const lag = Math.max(0.14, 0.36 - i * 0.032);
-        trail[i].x += (trail[i - 1].x - trail[i].x) * lag;
-        trail[i].y += (trail[i - 1].y - trail[i].y) * lag;
+      const vx = currentMouseX - prevHeadX;
+      const vy = currentMouseY - prevHeadY;
+      prevHeadX = currentMouseX;
+      prevHeadY = currentMouseY;
+
+      const distMoved = Math.hypot(vx, vy);
+      if (distMoved > 0.0015 && targetHover > 0) {
+        lastMoveTime = now;
       }
 
-      // Velocity calculation
-      const vx = (trail[0].x - prevHeadX) / (dt || 0.016);
-      const vy = (trail[0].y - prevHeadY) / (dt || 0.016);
-      prevHeadX = trail[0].x;
-      prevHeadY = trail[0].y;
-
-      const rawSpeed = Math.hypot(vx, vy);
-      smoothSpeed += (Math.min(rawSpeed * 0.25, 1.0) - smoothSpeed) * 0.16;
-
-      // --- Kinetic Motion Energy & Idle Decay Math ---
-      // When moving: motionEnergy quickly ramps up to 1.0
-      // When stationary (idle): motionEnergy progressively decays and shrinks to 0 (closes completely)
-      if (rawSpeed > 0.012 && targetHover > 0) {
-        // Active movement: energize reveal area
-        const boost = Math.min(rawSpeed * 3.5, 1.0);
-        motionEnergy = Math.min(1.0, motionEnergy + boost * 0.25 + 0.06);
-      } else {
-        // Idle / stationary: gracefully shrink and close over ~1.4 seconds
-        motionEnergy = Math.max(0.0, motionEnergy - dt * 0.72);
+      // Deposit a new ink splat at the current position if cursor moved enough
+      // Ink stays pinned where deposited! (Never slithers like a snake)
+      const distFromLastSplat = Math.hypot(currentMouseX - lastPlacedPos.x, currentMouseY - lastPlacedPos.y);
+      if (distFromLastSplat > 0.035 && targetHover > 0) {
+        splats.unshift({
+          x: currentMouseX,
+          y: currentMouseY,
+          birth: now,
+          radius: 0.20,
+        });
+        if (splats.length > MAX_SPLATS) {
+          splats.pop();
+        }
+        lastPlacedPos = { x: currentMouseX, y: currentMouseY };
       }
 
-      currentHover += (targetHover - currentHover) * 0.1;
-      const effectiveHover = currentHover * motionEnergy;
+      // 1-second delay before fading:
+      // If idle <= 1.0s: fully open (idleFade = 1.0)
+      // If idle > 1.0s: slowly fade and shrink over 2.2 seconds
+      const idleDuration = (now - lastMoveTime) / 1000;
+      let idleFade = 1.0;
+      if (idleDuration > 1.0) {
+        const fadeProgress = Math.min((idleDuration - 1.0) / 2.2, 1.0);
+        // Smooth cubic ease-out
+        idleFade = 1.0 - fadeProgress * fadeProgress * (3.0 - 2.0 * fadeProgress);
+      }
 
-      // Balanced reveal radius (not too large, focused and elegant)
-      // When cursor stops, baseRadius shrinks to 0 along with motionEnergy
-      const baseRadius = (0.22 + smoothSpeed * 0.06) * motionEnergy;
+      currentHover += (targetHover - currentHover) * 0.12;
+      const effectiveHover = currentHover * idleFade;
 
-      for (let i = 0; i < TRAIL_COUNT; i++) {
-        const t = i / (TRAIL_COUNT - 1);
-        trailRadiiBuffer[i] = Math.max(0.0, baseRadius * (1.0 - Math.pow(t, 1.35) * 0.65));
-        trailBuffer[i * 2] = trail[i].x;
-        trailBuffer[i * 2 + 1] = trail[i].y;
+      // Base radius of the active brush under cursor (tasteful and balanced)
+      const headRadius = 0.22 * idleFade;
+
+      // Update static deposited splats (each splat ages in place and gently diffuses)
+      for (let i = 0; i < MAX_SPLATS; i++) {
+        if (i < splats.length) {
+          const age = (now - splats[i].birth) / 1000;
+          // Splat naturally lives for ~2.0s
+          const splatLife = Math.max(0.0, 1.0 - age / 2.0) * idleFade;
+          splatsPosBuffer[i * 2] = splats[i].x;
+          splatsPosBuffer[i * 2 + 1] = splats[i].y;
+          splatsRadBuffer[i] = splats[i].radius * splatLife;
+        } else {
+          splatsPosBuffer[i * 2] = 0.5;
+          splatsPosBuffer[i * 2 + 1] = 0.5;
+          splatsRadBuffer[i] = 0.0;
+        }
       }
 
       let smoothProgress = 0.0;
@@ -434,8 +453,11 @@ export default function HeroShaderSlideshow({
       gl.uniform2f(uResolution, canvas!.width, canvas!.height);
       gl.uniform2f(uImageRes0, imageResolutions[currentIndex][0], imageResolutions[currentIndex][1]);
       gl.uniform2f(uImageRes1, imageResolutions[nextIndex][0], imageResolutions[nextIndex][1]);
-      gl.uniform2fv(uTrail, trailBuffer);
-      gl.uniform1fv(uTrailRadii, trailRadiiBuffer);
+      
+      gl.uniform2f(uHeadPos, currentMouseX, currentMouseY);
+      gl.uniform1f(uHeadRad, headRadius);
+      gl.uniform2fv(uSplatsPos, splatsPosBuffer);
+      gl.uniform1fv(uSplatsRad, splatsRadBuffer);
       gl.uniform1f(uHover, effectiveHover);
       gl.uniform1f(uTime, (now * 0.001) % 1000.0);
 
