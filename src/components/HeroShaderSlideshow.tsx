@@ -29,12 +29,10 @@ const FRAGMENT_SHADER_SRC = `
   uniform vec2 u_image_res1;
   uniform vec2 u_mouse_lead;
   uniform vec2 u_mouse_lag;
-  uniform float u_wobble;
   uniform float u_hover;
-  uniform float u_motion; // 1.0 = actively moving, 0.0 = resting / stationary
+  uniform float u_motion; // 1.0 = actively moving, 0.0 = resting
   uniform float u_time;
 
-  // --- HASH & PROCEDURAL NOISE ---
   float hash(vec2 p) {
     return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
   }
@@ -50,7 +48,6 @@ const FRAGMENT_SHADER_SRC = `
     return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
   }
 
-  // --- 3-OCTAVE FRACTAL BROWNIAN MOTION (FBM) ---
   float fbm(vec2 p) {
     float v = 0.0;
     float a = 0.5;
@@ -63,13 +60,12 @@ const FRAGMENT_SHADER_SRC = `
     return v;
   }
 
-  // --- POLYNOMIAL SMOOTH MINIMUM FOR LIQUID METABALL FUSION ---
+  // Smooth minimum for organic liquid metaball fusion
   float smin(float a, float b, float k) {
     float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
     return mix(b, a, h) - k * h * (1.0 - h);
   }
 
-  // --- EXACT OBJECT-FIT COVER UV CALCULATION ---
   vec2 getCoverUV(vec2 uv, vec2 screenRes, vec2 imgRes) {
     float screenAspect = screenRes.x / screenRes.y;
     float imgAspect = imgRes.x / imgRes.y;
@@ -86,55 +82,41 @@ const FRAGMENT_SHADER_SRC = `
   }
 
   void main() {
-    // 1. Aspect-Ratio Corrected UVs for texture sampling
+    // 1. Aspect-Ratio Corrected UVs for texture sampling (100% stable, zero distortion)
     vec2 uv0 = getCoverUV(v_uv, u_resolution, u_image_res0);
     vec2 uv1 = getCoverUV(v_uv, u_resolution, u_image_res1);
 
-    // 2. Isotropic Coordinates for Liquid Droplet
+    // 2. Isotropic Coordinates for Fluid Liquid Droplet Mask
     float aspect = u_resolution.x / u_resolution.y;
     vec2 p = vec2(v_uv.x * aspect, v_uv.y);
     vec2 m_lead = vec2(u_mouse_lead.x * aspect, u_mouse_lead.y);
     vec2 m_lag = vec2(u_mouse_lag.x * aspect, u_mouse_lag.y);
 
     float m = clamp(u_motion, 0.0, 1.0);
-    float wobble = clamp(u_wobble, -0.5, 1.2);
 
-    // 3. Dual-Center Fluid Metaball Math (Elastic Liquid Droplet):
-    // Lead droplet (main body around cursor)
+    // 3. Fluid Metaball Water Mask Math:
+    // Main body around cursor
     vec2 d1_vec = p - m_lead;
     float dist1 = length(d1_vec);
 
-    // Lag droplet (trailing liquid tail that creates viscous stretching)
+    // Trailing liquid tail that organically stretches when moving
     vec2 d2_vec = p - m_lag;
     float dist2 = length(d2_vec);
 
-    // Harmonic multipole surface wobble (jelly jiggle oscillation)
-    float theta = atan(d1_vec.y, d1_vec.x);
-    float jiggle = wobble * 0.042 * (sin(3.0 * theta + u_time * 7.5) + cos(2.0 * theta - u_time * 5.0));
-
-    // Dynamic radii: generous lead droplet + viscous trailing droplet
-    float r1 = 0.46 + jiggle;
+    // Generous, comfortable reveal radius
+    float r1 = 0.48;
     float r2 = 0.38;
 
-    // Organic liquid edge turbulence
-    float turb = fbm(p * 3.5 - u_time * 0.2) * (0.010 + 0.045 * m);
+    // Organic liquid edge contour (subtle fluid boundary variation)
+    float edge_flow = fbm(p * 3.5 - u_time * 0.25) * 0.035 * m;
 
-    // Smooth minimum fuses the lead and lag points into an organic, elastic water droplet
-    float fluid_dist = smin(dist1 - r1, dist2 - r2, 0.24) - turb;
+    // Smooth minimum fuses lead & lag into an elastic, fluid water droplet
+    float fluid_dist = smin(dist1 - r1, dist2 - r2, 0.25) - edge_flow;
 
-    // 4. Silky-Smooth, Halo-Free Color Bleed:
-    // Seamless Hermite transition blending color into monochrome with zero white halo ring
-    float reveal_mask = smoothstep(0.06, -0.26, fluid_dist) * u_hover;
+    // 4. Silky-Smooth Feathered Color Bleed (Zero halo light, zero harsh cuts)
+    float reveal_mask = smoothstep(0.06, -0.28, fluid_dist) * u_hover;
 
-    // 5. Elastic Water Refraction (cohesive, subtle, and settles when still)
-    vec2 radial_dir = dist1 > 0.001 ? normalize(d1_vec) : vec2(0.0);
-    float ripple = sin(fluid_dist * 18.0 - u_time * 5.0) * exp(-max(0.0, fluid_dist + 0.25) * 2.8) * 0.007 * m;
-    vec2 water_refract = radial_dir * (reveal_mask * 0.006 * m + ripple + wobble * 0.003);
-
-    vec2 final_uv0 = uv0 + water_refract;
-    vec2 final_uv1 = uv1 + water_refract;
-
-    // 6. Dust particle slideshow sweep transition
+    // 5. Dust particle slideshow sweep transition
     float n = fbm(v_uv * 18.0 + vec2(u_progress * 1.5, 0.0));
     float grain = hash(v_uv * 600.0 + u_progress * 40.0);
     float sweep = u_progress * 1.4 - 0.2;
@@ -143,9 +125,10 @@ const FRAGMENT_SHADER_SRC = `
     float dustZone = smoothstep(0.18, 0.0, distToEdge) * sin(u_progress * 3.14159265);
     vec2 dustOffset = vec2(grain * 0.05 + dustZone * 0.03, (grain - 0.5) * 0.03) * dustZone;
 
-    // Single-pass sampling: no ghost shadows, no double layering
-    vec4 col0 = texture2D(u_tex0, final_uv0 + dustOffset);
-    vec4 col1 = texture2D(u_tex1, final_uv1);
+    // 6. ROCK-SOLID STABLE TEXTURE SAMPLING:
+    // Pure uv0 / uv1 without any spatial warp — faces, eyes & people NEVER wobble or distort!
+    vec4 col0 = texture2D(u_tex0, uv0 + dustOffset);
+    vec4 col1 = texture2D(u_tex1, uv1);
 
     // Compute monochrome tone
     float gray0 = dot(col0.rgb, vec3(0.299, 0.587, 0.114));
@@ -159,8 +142,8 @@ const FRAGMENT_SHADER_SRC = `
     vec3 base_mono = mix(mono1, mono0, slide_mask) + vec3(spark);
     vec3 active_color = mix(col1.rgb, col0.rgb, slide_mask);
 
-    // 7. Pure, Soft, Velvety Transition:
-    // Completely halo-free — color seamlessly diffuses into monochrome without harsh rims
+    // 7. Pure, Feathered Transition from monochrome to vibrant true color:
+    // Silky soft diffusion with zero halo rings and zero pixel distortion
     vec3 final_rgb = mix(base_mono, active_color, reveal_mask);
 
     // Smooth opacity curve
@@ -224,7 +207,6 @@ export default function HeroShaderSlideshow({
     const uImageRes1 = gl.getUniformLocation(program, "u_image_res1");
     const uMouseLead = gl.getUniformLocation(program, "u_mouse_lead");
     const uMouseLag = gl.getUniformLocation(program, "u_mouse_lag");
-    const uWobble = gl.getUniformLocation(program, "u_wobble");
     const uHover = gl.getUniformLocation(program, "u_hover");
     const uMotion = gl.getUniformLocation(program, "u_motion");
     const uTime = gl.getUniformLocation(program, "u_time");
@@ -265,24 +247,19 @@ export default function HeroShaderSlideshow({
     let lastSwitchTime = performance.now();
     let animationFrameId: number;
 
-    // --- Elastic Water Physics (Metaball & Damped Harmonic Jiggle) ---
+    // --- Fluid Cursor Tracking (Elastic Lead & Viscous Lag Points) ---
     let targetX = 0.5;
     let targetY = 0.5;
     let leadX = 0.5;
     let leadY = 0.5;
     let lagX = 0.5;
     let lagY = 0.5;
-    let prevLeadX = 0.5;
-    let prevLeadY = 0.5;
-    let wobble = 0.0;
-    let wobbleVel = 0.0;
     let targetHover = 0.0;
     let currentHover = 0.0;
     let targetMotion = 0.0;
     let currentMotion = 0.0;
     let lastMoveTime = 0;
     let hasEntered = false;
-    let lastPhysicsTime = performance.now();
 
     const handlePointerMove = (e: PointerEvent) => {
       if (!canvas) return;
@@ -308,8 +285,6 @@ export default function HeroShaderSlideshow({
           leadY = targetY;
           lagX = targetX;
           lagY = targetY;
-          prevLeadX = targetX;
-          prevLeadY = targetY;
           hasEntered = true;
         }
       } else {
@@ -348,48 +323,27 @@ export default function HeroShaderSlideshow({
 
       resize();
 
-      // Elastic water physics update
-      const dt = Math.min((now - lastPhysicsTime) / 1000, 0.05);
-      lastPhysicsTime = now;
+      // Lead point follows cursor smoothly
+      leadX += (targetX - leadX) * 0.20;
+      leadY += (targetY - leadY) * 0.20;
 
-      // Lead point tracks cursor with responsive spring
-      leadX += (targetX - leadX) * 0.22;
-      leadY += (targetY - leadY) * 0.22;
+      // Lag point trails behind with liquid viscosity, stretching droplet into teardrop shape
+      lagX += (leadX - lagX) * 0.10;
+      lagY += (leadY - lagY) * 0.10;
 
-      // Lag point trails behind with viscous fluid drag (stretches droplet into fluid teardrop)
-      lagX += (leadX - lagX) * 0.11;
-      lagY += (leadY - lagY) * 0.11;
-
-      const vx = (leadX - prevLeadX) / (dt || 0.016);
-      const vy = (leadY - prevLeadY) / (dt || 0.016);
-      prevLeadX = leadX;
-      prevLeadY = leadY;
-      const speed = Math.hypot(vx, vy);
-
-      // Distance between lead and lag points (fluid stretch tension)
       const stretchDist = Math.hypot(leadX - lagX, leadY - lagY);
-
-      // Damped harmonic oscillator for jelly bounce / wobble:
-      // Accelerates on movement, bounces elastically on release
-      const kSpring = 42.0;
-      const cDamping = 6.0;
-      const impulse = stretchDist * 16.0;
-      const accel = impulse - kSpring * wobble - cDamping * wobbleVel;
-      wobbleVel += accel * dt;
-      wobble += wobbleVel * dt;
-      wobble = Math.max(-0.4, Math.min(1.2, wobble));
 
       currentHover += (targetHover - currentHover) * 0.10;
 
       // Motion energy computation
       const idleTime = now - lastMoveTime;
-      let targetMotion = 0.0;
       if (idleTime < 220 && targetHover > 0.05) {
-        targetMotion = Math.min(speed * 2.8 + stretchDist * 4.5 + 0.35, 1.0);
+        targetMotion = Math.min(stretchDist * 8.0 + 0.3, 1.0);
+      } else {
+        targetMotion = 0.0;
       }
 
-      // Responsive fluid attack, smooth settling decay
-      const motionRate = targetMotion > currentMotion ? 0.26 : 0.038;
+      const motionRate = targetMotion > currentMotion ? 0.25 : 0.04;
       currentMotion += (targetMotion - currentMotion) * motionRate;
 
       let smoothProgress = 0.0;
@@ -436,7 +390,6 @@ export default function HeroShaderSlideshow({
       gl.uniform2f(uImageRes1, imageResolutions[nextIndex][0], imageResolutions[nextIndex][1]);
       gl.uniform2f(uMouseLead, leadX, leadY);
       gl.uniform2f(uMouseLag, lagX, lagY);
-      gl.uniform1f(uWobble, wobble);
       gl.uniform1f(uHover, currentHover);
       gl.uniform1f(uMotion, currentMotion);
       gl.uniform1f(uTime, (now * 0.001) % 1000.0);
