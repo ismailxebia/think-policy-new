@@ -27,12 +27,13 @@ const FRAGMENT_SHADER_SRC = `
   uniform vec2 u_resolution;
   uniform vec2 u_image_res0;
   uniform vec2 u_image_res1;
-  uniform vec2 u_trail[6];
+  uniform vec2 u_mouse;
+  uniform vec2 u_mouse_vel;
   uniform float u_speed;
   uniform float u_hover;
   uniform float u_time;
 
-  // --- HASH & PROCEDURAL NOISE ---
+  // --- PROCEDURAL HASH & NOISE ---
   float hash(vec2 p) {
     return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
   }
@@ -61,7 +62,19 @@ const FRAGMENT_SHADER_SRC = `
     return v;
   }
 
-  // --- EXACT OBJECT-FIT COVER UV CALCULATION ---
+  // --- 2D CURL NOISE FOR VISCOUS FLUID BOUNDARY ---
+  vec2 curlNoise(vec2 p) {
+    const float eps = 0.01;
+    float n1 = noise(p + vec2(0.0, eps));
+    float n2 = noise(p - vec2(0.0, eps));
+    float n3 = noise(p + vec2(eps, 0.0));
+    float n4 = noise(p - vec2(eps, 0.0));
+    float dy = (n1 - n2) / (2.0 * eps);
+    float dx = (n3 - n4) / (2.0 * eps);
+    return vec2(dy, -dx);
+  }
+
+  // --- EXACT OBJECT-FIT COVER UV ---
   vec2 getCoverUV(vec2 uv, vec2 screenRes, vec2 imgRes) {
     float screenAspect = screenRes.x / screenRes.y;
     float imgAspect = imgRes.x / imgRes.y;
@@ -77,72 +90,46 @@ const FRAGMENT_SHADER_SRC = `
     );
   }
 
-  // --- DISTANCE TO CAPSULE LINE SEGMENT (SDF) ---
-  float distToSegment(vec2 p, vec2 a, vec2 b) {
-    vec2 pa = p - a;
-    vec2 ba = b - a;
-    float h = clamp(dot(pa, ba) / (dot(ba, ba) + 0.00001), 0.0, 1.0);
-    return length(pa - ba * h);
-  }
-
   void main() {
-    // 1. Exact, pin-sharp UV coordinates for texture sampling
+    // 1. Precise, undistorted UVs for texture sampling
     vec2 uv0 = getCoverUV(v_uv, u_resolution, u_image_res0);
     vec2 uv1 = getCoverUV(v_uv, u_resolution, u_image_res1);
 
-    // 2. Aspect-Ratio Corrected Space
+    // 2. Aspect-ratio corrected space for isotropic fluid metric
     float aspect = u_resolution.x / u_resolution.y;
-    vec2 p_aspect = vec2(v_uv.x * aspect, v_uv.y);
+    vec2 p = vec2(v_uv.x * aspect, v_uv.y);
+    vec2 m = vec2(u_mouse.x * aspect, u_mouse.y);
+    vec2 d = p - m;
 
-    // 3. Cursor Head & Multi-Segment Trail Field Calculation
-    vec2 head_pos = vec2(u_trail[0].x * aspect, u_trail[0].y);
-    float d_head = length(p_aspect - head_pos);
+    // 3. Unified Hydrodynamic Teardrop Deformation (Single Continuous Mathematical Lens)
+    vec2 v = vec2(u_mouse_vel.x * aspect, u_mouse_vel.y);
+    float vel_len = length(v);
+    vec2 v_dir = vel_len > 0.0001 ? v / vel_len : vec2(0.0);
 
-    // Organic noise on head contour
-    float head_turb = fbm(p_aspect * 5.0 + u_time * 0.25) * 0.05;
-    float head_mask = smoothstep(0.34, 0.16, d_head - head_turb);
+    // Project distance along the motion vector
+    float proj_v = dot(d, v_dir);
+    // Behind cursor (proj_v < 0): pull the fluid coordinate to form a continuous teardrop wake
+    float tail_pull = min(0.0, proj_v) * clamp(u_speed * 1.6, 0.0, 0.75);
+    vec2 d_hydro = d - v_dir * tail_pull;
 
-    float total_reveal = head_mask;
-    float tail_distortion = 0.0;
-    vec2 tail_flow_dir = vec2(0.0);
+    // Seamless viscous edge curl & organic turbulence
+    vec2 fluid_curl = curlNoise(p * 3.5 + u_time * 0.35);
+    float fluid_turb = fbm(p * 4.5 - u_time * 0.2);
+    float boundary_noise = (fluid_curl.x * 0.035 + fluid_turb * 0.045) * (1.0 + u_speed * 0.5);
 
-    // Evaluate trailing ribbon segments
-    for (int i = 0; i < 5; i++) {
-      vec2 a = vec2(u_trail[i].x * aspect, u_trail[i].y);
-      vec2 b = vec2(u_trail[i + 1].x * aspect, u_trail[i + 1].y);
-      float d_seg = distToSegment(p_aspect, a, b);
+    // Distance to single unified liquid droplet
+    float r = length(d_hydro) - boundary_noise;
 
-      // Tapering width from 0.32 at head down to 0.08 at tail tip
-      float t = float(i) / 5.0;
-      float seg_rad = mix(0.30, 0.08, t);
-      float seg_turb = noise(p_aspect * (6.0 + float(i) * 2.0) - u_time * 1.2) * 0.03 * (1.0 - t);
-      float seg_mask = smoothstep(seg_rad, seg_rad * 0.25, d_seg - seg_turb) * (1.0 - t * 0.65);
+    // Smooth Hermite liquid mask (generous lens radius ~0.33)
+    float base_radius = 0.33;
+    float liquid_mask = smoothstep(base_radius, base_radius * 0.25, r) * u_hover;
 
-      total_reveal = max(total_reveal, seg_mask);
-
-      // Tail distortion is focused on segments behind the head
-      if (i >= 1) {
-        float seg_wake = seg_mask * smoothstep(seg_rad, 0.0, d_seg);
-        tail_distortion += seg_wake;
-        tail_flow_dir += (a - b) * seg_wake;
-      }
-    }
-
-    total_reveal *= u_hover;
-
-    // Distortion activates strictly during motion (u_speed), vanishing when stationary!
-    float active_tail = clamp(tail_distortion * u_speed * 3.2, 0.0, 1.0) * u_hover;
-
-    // 4. Subtle, Sweet Liquid Refraction Ripple along the moving tail
-    vec2 flow_norm = length(tail_flow_dir) > 0.001 ? normalize(tail_flow_dir) : vec2(1.0, 0.0);
-    vec2 perp_flow = vec2(-flow_norm.y, flow_norm.x);
-    float ripple = sin(d_head * 28.0 - u_time * 7.0) * 0.007;
-    vec2 tail_uv_disp = (perp_flow * ripple + flow_norm * 0.003) * active_tail;
-
-    // Delicate sweet chromatic refraction strictly on the tail ribbon
-    vec2 disp_r = tail_uv_disp * 1.18;
-    vec2 disp_g = tail_uv_disp;
-    vec2 disp_b = tail_uv_disp * 0.82;
+    // 4. Subtle Physical Water Meniscus Refraction:
+    // Meniscus is zero in center (mask = 1), zero outside (mask = 0), and peaks smoothly only at the liquid edge!
+    float meniscus = liquid_mask * (1.0 - liquid_mask) * 4.0;
+    vec2 r_dir = length(d_hydro) > 0.001 ? normalize(d_hydro) : vec2(0.0);
+    // Refraction activates gracefully with movement speed, zero when still
+    vec2 refr_offset = r_dir * meniscus * 0.008 * u_speed;
 
     // 5. Slideshow Transition Wavefront
     float n = fbm(v_uv * 18.0 + vec2(u_progress * 1.5, 0.0));
@@ -153,13 +140,12 @@ const FRAGMENT_SHADER_SRC = `
     float dustZone = smoothstep(0.18, 0.0, distToEdge) * sin(u_progress * 3.14159265);
     vec2 dustOffset = vec2(grain * 0.05 + dustZone * 0.03, (grain - 0.5) * 0.03) * dustZone;
 
-    // Base texture samples
-    vec4 col0 = texture2D(u_tex0, uv0 + dustOffset);
-    vec4 col1 = texture2D(u_tex1, uv1);
+    // 6. Base Monochrome Texture Samples
+    vec4 col0_mono = texture2D(u_tex0, uv0 + dustOffset);
+    vec4 col1_mono = texture2D(u_tex1, uv1);
 
-    // Monochrome base tone
-    float gray0 = dot(col0.rgb, vec3(0.299, 0.587, 0.114));
-    float gray1 = dot(col1.rgb, vec3(0.299, 0.587, 0.114));
+    float gray0 = dot(col0_mono.rgb, vec3(0.299, 0.587, 0.114));
+    float gray1 = dot(col1_mono.rgb, vec3(0.299, 0.587, 0.114));
     vec3 mono0 = vec3(gray0 * 1.15, gray0 * 1.12, gray0 * 1.08);
     vec3 mono1 = vec3(gray1 * 1.15, gray1 * 1.12, gray1 * 1.08);
 
@@ -167,31 +153,22 @@ const FRAGMENT_SHADER_SRC = `
     float spark = grain * dustZone * 0.3;
     vec3 base_mono = mix(mono1, mono0, slide_mask) + vec3(spark);
 
-    // Pure, crystal-clear original photograph colors
-    vec3 pure_color = mix(col1.rgb, col0.rgb, slide_mask);
+    // 7. Color Texture Sample with Meniscus Refraction:
+    // Center is 100% pin-sharp original photo; edge has subtle liquid refraction
+    vec4 col0_color = texture2D(u_tex0, uv0 + refr_offset);
+    vec4 col1_color = texture2D(u_tex1, uv1 + refr_offset);
+    vec3 original_color = mix(col1_color.rgb, col0_color.rgb, slide_mask);
 
-    // Sweet distorted tail color sample
-    vec3 tail_color;
-    tail_color.r = mix(texture2D(u_tex1, uv1 + disp_r).r, texture2D(u_tex0, uv0 + disp_r).r, slide_mask);
-    tail_color.g = mix(texture2D(u_tex1, uv1 + disp_g).g, texture2D(u_tex0, uv0 + disp_g).g, slide_mask);
-    tail_color.b = mix(texture2D(u_tex1, uv1 + disp_b).b, texture2D(u_tex0, uv0 + disp_b).b, slide_mask);
+    // 8. Delicate Surface Tension Caustic Glow at Edge
+    float edge_highlight = pow(meniscus, 2.5) * 0.16 * u_hover;
 
-    // Head remains crystal-clear; tail trail has the sweet distortion
-    vec3 active_reveal_color = mix(pure_color, tail_color, active_tail * 0.85);
-
-    // Subtle luminous shimmer on the reveal boundary
-    float rim_zone = abs(d_head - 0.32);
-    float rim_glow = exp(-pow(rim_zone / 0.018, 2.0)) * 0.18 * u_hover;
-
-    // Final color blend
-    vec3 final_rgb = mix(base_mono, active_reveal_color, total_reveal) + vec3(rim_glow);
-    float final_alpha = mix(0.28, 0.95, total_reveal);
+    // Final Composition
+    vec3 final_rgb = mix(base_mono, original_color, liquid_mask) + vec3(edge_highlight);
+    float final_alpha = mix(0.28, 0.95, liquid_mask);
 
     gl_FragColor = vec4(final_rgb, final_alpha);
   }
 `;
-
-const TRAIL_LENGTH = 6;
 
 export default function HeroShaderSlideshow({
   images,
@@ -245,7 +222,8 @@ export default function HeroShaderSlideshow({
     const uResolution = gl.getUniformLocation(program, "u_resolution");
     const uImageRes0 = gl.getUniformLocation(program, "u_image_res0");
     const uImageRes1 = gl.getUniformLocation(program, "u_image_res1");
-    const uTrail = gl.getUniformLocation(program, "u_trail");
+    const uMouse = gl.getUniformLocation(program, "u_mouse");
+    const uMouseVel = gl.getUniformLocation(program, "u_mouse_vel");
     const uSpeed = gl.getUniformLocation(program, "u_speed");
     const uHover = gl.getUniformLocation(program, "u_hover");
     const uTime = gl.getUniformLocation(program, "u_time");
@@ -286,14 +264,15 @@ export default function HeroShaderSlideshow({
     let lastSwitchTime = performance.now();
     let animationFrameId: number;
 
-    // --- Interactive Multi-Segment Trail State ---
+    // --- Interactive Mouse Physics State ---
     let targetMouseX = 0.5;
     let targetMouseY = 0.5;
-    const trail = Array.from({ length: TRAIL_LENGTH }, () => ({ x: 0.5, y: 0.5 }));
-    const trailBuffer = new Float32Array(TRAIL_LENGTH * 2);
-
-    let prevHeadX = 0.5;
-    let prevHeadY = 0.5;
+    let currentMouseX = 0.5;
+    let currentMouseY = 0.5;
+    let prevMouseX = 0.5;
+    let prevMouseY = 0.5;
+    let mouseVelX = 0;
+    let mouseVelY = 0;
     let smoothSpeed = 0.0;
     let targetHover = 0.0;
     let currentHover = 0.0;
@@ -319,12 +298,10 @@ export default function HeroShaderSlideshow({
         targetHover = 1.0;
 
         if (!hasEntered) {
-          for (let i = 0; i < TRAIL_LENGTH; i++) {
-            trail[i].x = targetMouseX;
-            trail[i].y = targetMouseY;
-          }
-          prevHeadX = targetMouseX;
-          prevHeadY = targetMouseY;
+          currentMouseX = targetMouseX;
+          currentMouseY = targetMouseY;
+          prevMouseX = targetMouseX;
+          prevMouseY = targetMouseY;
           hasEntered = true;
         }
       } else {
@@ -363,37 +340,25 @@ export default function HeroShaderSlideshow({
 
       resize();
 
-      // Multi-point fluid trail physics simulation
+      // Damped spring physics for cursor tracking
       const dt = Math.min((now - lastPhysicsTime) / 1000, 0.1);
       lastPhysicsTime = now;
 
-      // Head point chases cursor target
-      trail[0].x += (targetMouseX - trail[0].x) * 0.24;
-      trail[0].y += (targetMouseY - trail[0].y) * 0.24;
+      currentMouseX += (targetMouseX - currentMouseX) * 0.15;
+      currentMouseY += (targetMouseY - currentMouseY) * 0.15;
 
-      // Trailing points progressively lag behind previous point
-      for (let i = 1; i < TRAIL_LENGTH; i++) {
-        const lag = Math.max(0.12, 0.32 - i * 0.04);
-        trail[i].x += (trail[i - 1].x - trail[i].x) * lag;
-        trail[i].y += (trail[i - 1].y - trail[i].y) * lag;
-      }
+      const vx = (currentMouseX - prevMouseX) / (dt || 0.016);
+      const vy = (currentMouseY - prevMouseY) / (dt || 0.016);
+      prevMouseX = currentMouseX;
+      prevMouseY = currentMouseY;
 
-      // Compute velocity & speed
-      const vx = (trail[0].x - prevHeadX) / (dt || 0.016);
-      const vy = (trail[0].y - prevHeadY) / (dt || 0.016);
-      prevHeadX = trail[0].x;
-      prevHeadY = trail[0].y;
+      mouseVelX += (vx - mouseVelX) * 0.22;
+      mouseVelY += (vy - mouseVelY) * 0.22;
 
       const rawSpeed = Math.min(Math.hypot(vx, vy) * 0.22, 1.0);
-      smoothSpeed += (rawSpeed - smoothSpeed) * 0.15;
+      smoothSpeed += (rawSpeed - smoothSpeed) * 0.14;
 
       currentHover += (targetHover - currentHover) * 0.08;
-
-      // Flatten trail data into Float32Array buffer for shader uniform
-      for (let i = 0; i < TRAIL_LENGTH; i++) {
-        trailBuffer[i * 2] = trail[i].x;
-        trailBuffer[i * 2 + 1] = trail[i].y;
-      }
 
       let smoothProgress = 0.0;
 
@@ -437,7 +402,8 @@ export default function HeroShaderSlideshow({
       gl.uniform2f(uResolution, canvas!.width, canvas!.height);
       gl.uniform2f(uImageRes0, imageResolutions[currentIndex][0], imageResolutions[currentIndex][1]);
       gl.uniform2f(uImageRes1, imageResolutions[nextIndex][0], imageResolutions[nextIndex][1]);
-      gl.uniform2fv(uTrail, trailBuffer);
+      gl.uniform2f(uMouse, currentMouseX, currentMouseY);
+      gl.uniform2f(uMouseVel, mouseVelX, mouseVelY);
       gl.uniform1f(uSpeed, smoothSpeed);
       gl.uniform1f(uHover, currentHover);
       gl.uniform1f(uTime, (now * 0.001) % 1000.0);
