@@ -1,11 +1,13 @@
 "use client";
 
 import Image from "next/image";
-import Link from "next/link";
 import { useState, useEffect } from "react";
-import { X, Share2, Flag, Layers, BookOpen } from "lucide-react";
+import { Share2, Flag, Layers, BookOpen } from "lucide-react";
 import HeroShaderSlideshow from "@/components/HeroShaderSlideshow";
 import PartnerLogos from "@/components/PartnerLogos";
+import CountUpNumber from "@/components/CountUpNumber";
+import SiteHeader from "@/components/SiteHeader";
+import SiteFooter from "@/components/SiteFooter";
 
 const HERO_IMAGES = [
   "/c40/c40-photo1.png",
@@ -14,7 +16,6 @@ const HERO_IMAGES = [
 ];
 
 export default function HomePage() {
-  const [showBanner, setShowBanner] = useState(true);
   const [scrollY, setScrollY] = useState(0);
 
   useEffect(() => {
@@ -34,70 +35,7 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-white text-[#18181B] antialiased flex flex-col font-inter selection:bg-[#E5E7EB] selection:text-[#18181B]">
-      {/* ========================================================= */}
-      {/* TOP ANNOUNCEMENT BANNER */}
-      {/* ========================================================= */}
-      {showBanner && (
-        <div className="bg-[#18181B] text-white text-xs py-2 px-4 flex items-center justify-between z-50 border-b border-black font-inter">
-          <div className="w-6" />
-          <div className="text-center font-medium tracking-wide">
-            Try out ThinkPolicy : Ready to create impact?
-          </div>
-          <button
-            onClick={() => setShowBanner(false)}
-            className="text-neutral-400 hover:text-white transition-colors p-1 cursor-pointer"
-            aria-label="Dismiss banner"
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      )}
-
-      {/* ========================================================= */}
-      {/* MAIN NAVBAR */}
-      {/* ========================================================= */}
-      <header className="border-b border-[#E5E7EB] bg-white sticky top-0 z-40 font-inter">
-        <div className="w-full max-w-[1280px] mx-auto px-6 sm:px-10 lg:px-12 h-14 flex items-center justify-between">
-          {/* Left: Brand Logo & Navigation */}
-          <div className="flex items-center gap-8">
-            <Link href="/" className="flex items-center gap-2" aria-label="Think Policy Home">
-              <Image
-                src="/logo-symbol.svg"
-                alt="Think Policy Logo"
-                width={18}
-                height={18}
-                priority
-                className="w-[18px] h-[18px] object-contain"
-              />
-            </Link>
-
-            <nav className="hidden md:flex items-center gap-6 text-[13px] font-medium text-[#4B5563]">
-              <Link href="/product" className="hover:text-[#18181B] transition-colors">Product</Link>
-              <Link href="/publication" className="hover:text-[#18181B] transition-colors">Publication</Link>
-              <Link href="/community" className="hover:text-[#18181B] transition-colors">Community</Link>
-              <Link href="/newsletter" className="hover:text-[#18181B] transition-colors">Newsletter</Link>
-              <Link href="/about-us" className="hover:text-[#18181B] transition-colors">About Us</Link>
-            </nav>
-          </div>
-
-          {/* Right: Portfolio, Join Us */}
-          <div className="flex items-center gap-[12px]">
-            <Link
-              href="/use-case/c40"
-              className="px-3.5 py-1.5 rounded-md border border-[#E5E7EB] text-xs font-semibold text-[#18181B] hover:bg-[#F9FAFB] transition-colors"
-            >
-              Portfolio
-            </Link>
-
-            <Link
-              href="/join"
-              className="px-3.5 py-1.5 rounded-md bg-[#18181B] text-white text-xs font-semibold hover:bg-black transition-colors font-manrope"
-            >
-              Join Us
-            </Link>
-          </div>
-        </div>
-      </header>
+      <SiteHeader />
 
       {/* ========================================================= */}
       {/* SECTION 1: HERO (Edge-to-Edge Panoramic Shader Slideshow) */}
@@ -111,9 +49,9 @@ export default function HomePage() {
           scrollY={scrollY}
         />
 
-        {/* 3-Column Grid Aligned to Container Width */}
+        {/* 3-Column Grid Aligned to Container Width (Center column widened by 40px) */}
         <div className="w-full max-w-[1280px] mx-auto px-6 sm:px-10 lg:px-12 relative z-10">
-          <div className="grid grid-cols-1 lg:grid-cols-3 lg:h-[calc(100dvh-92px)] lg:min-h-[540px] lg:max-h-[660px]">
+          <div className="grid grid-cols-1 lg:grid-cols-[calc(1fr-20px)_calc(1fr+40px)_calc(1fr-20px)] lg:h-[calc(100dvh-92px)] lg:min-h-[540px] lg:max-h-[660px]">
             {/* ----------------------------------------------------- */}
             {/* Column 1 (Left 1/3) - Flush Left Alignment           */}
             {/* ----------------------------------------------------- */}
@@ -260,7 +198,7 @@ export default function HomePage() {
       {/* SECTION 4: OUR IMPACT IN 2025 (Benchmark)                 */}
       {/* ========================================================= */}
       <section className="w-full bg-[#1A1614] text-white py-[96px]">
-        <div className="w-full max-w-[1280px] mx-auto px-6 sm:px-12 lg:px-20">
+        <div className="w-full max-w-[1280px] mx-auto px-6 sm:px-10 lg:px-12">
           {/* Section Header */}
           <div className="text-center space-y-2.5 mb-[48px]">
             <span className="text-[13px] sm:text-[14px] text-[#A8A29E] font-inter block font-normal tracking-wide">
@@ -293,9 +231,12 @@ export default function HomePage() {
               </div>
 
               <div className="relative z-10">
-                <span className="font-iowan text-[48px] sm:text-[54px] lg:text-[58px] text-white font-normal leading-none block tracking-tight">
-                  8M
-                </span>
+                <CountUpNumber
+                  value={8}
+                  suffix="M"
+                  delay={0}
+                  className="font-iowan text-[48px] sm:text-[54px] lg:text-[58px] text-white font-normal leading-none block tracking-tight"
+                />
               </div>
 
               <div className="relative z-10 pt-16 sm:pt-20">
@@ -311,9 +252,11 @@ export default function HomePage() {
             {/* Metric 2: 372 */}
             <div className="relative p-8 sm:p-10 flex flex-col justify-between min-h-[300px] sm:min-h-[340px]">
               <div>
-                <span className="font-iowan text-[48px] sm:text-[54px] lg:text-[58px] text-white font-normal leading-none block tracking-tight">
-                  372
-                </span>
+                <CountUpNumber
+                  value={372}
+                  delay={150}
+                  className="font-iowan text-[48px] sm:text-[54px] lg:text-[58px] text-white font-normal leading-none block tracking-tight"
+                />
               </div>
 
               <div className="pt-16 sm:pt-20">
@@ -329,9 +272,13 @@ export default function HomePage() {
             {/* Metric 3: 3.9M */}
             <div className="relative p-8 sm:p-10 flex flex-col justify-between min-h-[300px] sm:min-h-[340px]">
               <div>
-                <span className="font-iowan text-[48px] sm:text-[54px] lg:text-[58px] text-white font-normal leading-none block tracking-tight">
-                  3.9M
-                </span>
+                <CountUpNumber
+                  value={3.9}
+                  decimals={1}
+                  suffix="M"
+                  delay={300}
+                  className="font-iowan text-[48px] sm:text-[54px] lg:text-[58px] text-white font-normal leading-none block tracking-tight"
+                />
               </div>
 
               <div className="pt-16 sm:pt-20">
@@ -347,9 +294,13 @@ export default function HomePage() {
             {/* Metric 4: 8.5/10 */}
             <div className="relative p-8 sm:p-10 flex flex-col justify-between min-h-[300px] sm:min-h-[340px]">
               <div>
-                <span className="font-iowan text-[48px] sm:text-[54px] lg:text-[58px] text-white font-normal leading-none block tracking-tight">
-                  8.5/10
-                </span>
+                <CountUpNumber
+                  value={8.5}
+                  decimals={1}
+                  suffix="/10"
+                  delay={450}
+                  className="font-iowan text-[48px] sm:text-[54px] lg:text-[58px] text-white font-normal leading-none block tracking-tight"
+                />
               </div>
 
               <div className="pt-16 sm:pt-20">
@@ -377,10 +328,73 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Footer Minimal */}
-      <footer className="border-t border-[#E5E7EB] py-8 text-center text-xs text-[#6B7280] bg-white">
-        © 2026 Think Policy. All rights reserved.
-      </footer>
+      {/* ========================================================= */}
+      {/* SECTION 4: THE REFORMIST (Video Spotlight)               */}
+      {/* ========================================================= */}
+      <section className="w-full bg-[#0E0E0E] text-white">
+        <div className="w-full max-w-[1280px] mx-auto px-6 sm:px-10 lg:px-12 py-20 sm:py-24">
+          <div className="text-center space-y-4">
+            <h2 className="font-iowan italic text-[32px] sm:text-[40px] font-normal leading-[120%] text-white">
+              The Reformist
+            </h2>
+            <p className="text-[14px] text-[#9CA3AF] font-inter">
+              Spotlighting the people, ideas, and stories reshaping the system.
+            </p>
+          </div>
+
+          <div className="mt-12 mx-auto max-w-[840px]">
+            <div className="aspect-video w-full overflow-hidden rounded-2xl bg-black">
+              <iframe
+                src="https://www.youtube.com/embed/VK--1mZgQdY"
+                title="The Reformist — YouTube video"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allowFullScreen
+                className="h-full w-full border-0"
+              />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ========================================================= */}
+      {/* SECTION 5: AS COVERED IN (Media Logos from thinkpolicy.id) */}
+      {/* ========================================================= */}
+      <section className="w-full bg-[#0E0E0E] text-white border-t border-white/10">
+        <div className="w-full max-w-[1280px] mx-auto px-6 sm:px-10 lg:px-12 py-16 sm:py-20">
+          <h2 className="text-center text-[11px] font-semibold uppercase tracking-[0.18em] text-white/60 font-inter mb-12">
+            As Covered In
+          </h2>
+          <div className="flex flex-wrap items-center justify-center gap-x-10 sm:gap-x-14 gap-y-8">
+            {[
+              { src: "/media/voa.webp", alt: "VOA", w: 141, h: 54 },
+              { src: "/media/abc-news.webp", alt: "ABC News", w: 128, h: 149 },
+              { src: "/media/forbes.webp", alt: "Forbes", w: 273, h: 107 },
+              { src: "/media/new-york-times.webp", alt: "The New York Times", w: 485, h: 71 },
+              { src: "/media/nasdaq.webp", alt: "Nasdaq", w: 255, h: 72 },
+              { src: "/media/al-jazeera.webp", alt: "Al Jazeera", w: 209, h: 71 },
+              { src: "/media/sea-today.webp", alt: "SEA Today", w: 227, h: 131 },
+              { src: "/media/the-economist.webp", alt: "The Economist", w: 219, h: 108 },
+              { src: "/media/indonesia-at-melbourne.webp", alt: "Indonesia at Melbourne", w: 320, h: 41 },
+              { src: "/media/idn-times.webp", alt: "IDN Times", w: 320, h: 51 },
+              { src: "/media/tempo.webp", alt: "Tempo.co", w: 186, h: 62 },
+              { src: "/media/the-jakarta-post.webp", alt: "The Jakarta Post", w: 428, h: 59 },
+              { src: "/media/cna.webp", alt: "CNA", w: 119, h: 150 },
+              { src: "/media/tvri.webp", alt: "TVRI", w: 164, h: 98 },
+            ].map((logo) => (
+              <Image
+                key={logo.src}
+                src={logo.src}
+                alt={logo.alt}
+                width={logo.w}
+                height={logo.h}
+                className="h-6 sm:h-7 w-auto object-contain opacity-70 hover:opacity-100 transition-opacity duration-300"
+              />
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <SiteFooter />
     </div>
   );
 }
