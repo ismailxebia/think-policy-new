@@ -49,9 +49,9 @@ export default function HomePage() {
           scrollY={scrollY}
         />
 
-        {/* 3-Column Grid Aligned to Container Width (Center column widened by 40px) */}
+        {/* 3-Column Grid Aligned to Container Width (Center column widened by ~40px) */}
         <div className="w-full max-w-[1280px] mx-auto px-6 sm:px-10 lg:px-12 relative z-10">
-          <div className="grid grid-cols-1 lg:grid-cols-[calc(1fr-20px)_calc(1fr+40px)_calc(1fr-20px)] lg:h-[calc(100dvh-92px)] lg:min-h-[540px] lg:max-h-[660px]">
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.15fr_1fr] lg:h-[calc(100dvh-92px)] lg:min-h-[540px] lg:max-h-[660px]">
             {/* ----------------------------------------------------- */}
             {/* Column 1 (Left 1/3) - Flush Left Alignment           */}
             {/* ----------------------------------------------------- */}
