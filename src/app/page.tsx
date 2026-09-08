@@ -6,8 +6,10 @@ import { Share2, Flag, Layers, BookOpen } from "lucide-react";
 import HeroShaderSlideshow from "@/components/HeroShaderSlideshow";
 import PartnerLogos from "@/components/PartnerLogos";
 import CountUpNumber from "@/components/CountUpNumber";
+import GrowDivider from "@/components/GrowDivider";
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
+import ReformistSlider from "@/components/ReformistSlider";
 
 const HERO_IMAGES = [
   "/c40/c40-photo1.png",
@@ -118,67 +120,49 @@ export default function HomePage() {
           </h2>
         </div>
 
-        {/* 4 Pillars Grid with Vertical Dividers */}
+        {/* 4 Pillars Grid — 24px padding, auto gaps, growing dividers */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4">
-          {/* Pillar 1: Solutioning - Flush left */}
-          <div className="py-6 pr-6 flex flex-col justify-between min-h-[220px]">
-            <div className="space-y-5">
-              <div className="w-6 h-6 flex items-center text-[#18181B]">
-                <Share2 className="w-6 h-6 stroke-[1.5]" />
-              </div>
+          {[
+            {
+              icon: Share2,
+              title: "Solutioning",
+              description: "Turning promising ideas into implementable solutions through grounded pathways.",
+            },
+            {
+              icon: Flag,
+              title: "Convening",
+              description: "Building the trust, relationships, and coalitions needed for action.",
+            },
+            {
+              icon: Layers,
+              title: "(Un)learning",
+              description: "Equipping people with the capacity to drive change.",
+            },
+            {
+              icon: BookOpen,
+              title: "Storytelling",
+              description: "Creating shared understanding around complex issues through narratives.",
+            },
+          ].map((pillar, index) => (
+            <div
+              key={pillar.title}
+              className="relative h-[230px] p-6 flex flex-col justify-between items-start"
+            >
+              {index > 0 && (
+                <GrowDivider
+                  className="absolute left-0 top-0 bottom-0 w-[0.5px] bg-[#DCDCD6]"
+                  delay={index * 150}
+                />
+              )}
+              <pillar.icon className="w-6 h-6 stroke-[1.5] text-[#18181B]" />
               <h3 className="text-[16px] font-semibold text-[#18181B] font-inter">
-                Solutioning
+                {pillar.title}
               </h3>
+              <p className="text-[13.5px] sm:text-[14px] text-[#52525B] leading-[21px] font-inter">
+                {pillar.description}
+              </p>
             </div>
-            <p className="text-[13.5px] sm:text-[14px] text-[#52525B] leading-[21px] font-inter pt-6">
-              Turning promising ideas into implementable solutions through grounded pathways.
-            </p>
-          </div>
-
-          {/* Pillar 2: Convening */}
-          <div className="py-6 px-6 lg:border-l border-[#E5E7EB] flex flex-col justify-between min-h-[220px]">
-            <div className="space-y-5">
-              <div className="w-6 h-6 flex items-center text-[#18181B]">
-                <Flag className="w-6 h-6 stroke-[1.5]" />
-              </div>
-              <h3 className="text-[16px] font-semibold text-[#18181B] font-inter">
-                Convening
-              </h3>
-            </div>
-            <p className="text-[13.5px] sm:text-[14px] text-[#52525B] leading-[21px] font-inter pt-6">
-              Building the trust, relationships, and coalitions needed for action.
-            </p>
-          </div>
-
-          {/* Pillar 3: (Un)learning */}
-          <div className="py-6 px-6 lg:border-l border-[#E5E7EB] flex flex-col justify-between min-h-[220px]">
-            <div className="space-y-5">
-              <div className="w-6 h-6 flex items-center text-[#18181B]">
-                <Layers className="w-6 h-6 stroke-[1.5]" />
-              </div>
-              <h3 className="text-[16px] font-semibold text-[#18181B] font-inter">
-                (Un)learning
-              </h3>
-            </div>
-            <p className="text-[13.5px] sm:text-[14px] text-[#52525B] leading-[21px] font-inter pt-6">
-              Equipping people with the capacity to drive change.
-            </p>
-          </div>
-
-          {/* Pillar 4: Storytelling */}
-          <div className="py-6 pl-6 lg:border-l border-[#E5E7EB] flex flex-col justify-between min-h-[220px]">
-            <div className="space-y-5">
-              <div className="w-6 h-6 flex items-center text-[#18181B]">
-                <BookOpen className="w-6 h-6 stroke-[1.5]" />
-              </div>
-              <h3 className="text-[16px] font-semibold text-[#18181B] font-inter">
-                Storytelling
-              </h3>
-            </div>
-            <p className="text-[13.5px] sm:text-[14px] text-[#52525B] leading-[21px] font-inter pt-6">
-              Creating shared understanding around complex issues through narratives.
-            </p>
-          </div>
+          ))}
         </div>
       </section>
 
@@ -367,32 +351,9 @@ export default function HomePage() {
       </section>
 
       {/* ========================================================= */}
-      {/* SECTION 4: THE REFORMIST (Video Spotlight)               */}
+      {/* SECTION 4: THE REFORMIST (Centered Peek Carousel)         */}
       {/* ========================================================= */}
-      <section className="w-full bg-[#0E0E0E] text-white">
-        <div className="w-full max-w-[1280px] mx-auto px-6 sm:px-10 lg:px-12 py-20 sm:py-24">
-          <div className="text-center space-y-4">
-            <h2 className="font-iowan italic text-[32px] sm:text-[40px] font-normal leading-[120%] text-white">
-              The Reformist
-            </h2>
-            <p className="text-[14px] text-[#9CA3AF] font-inter">
-              Spotlighting the people, ideas, and stories reshaping the system.
-            </p>
-          </div>
-
-          <div className="mt-12 mx-auto max-w-[840px]">
-            <div className="aspect-video w-full overflow-hidden rounded-2xl bg-black">
-              <iframe
-                src="https://www.youtube.com/embed/VK--1mZgQdY"
-                title="The Reformist — YouTube video"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                allowFullScreen
-                className="h-full w-full border-0"
-              />
-            </div>
-          </div>
-        </div>
-      </section>
+      <ReformistSlider />
 
       <SiteFooter />
     </div>
