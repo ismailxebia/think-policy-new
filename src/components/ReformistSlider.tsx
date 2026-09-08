@@ -2,7 +2,24 @@
 
 import Image from "next/image";
 import { useEffect, useRef, useState, useCallback } from "react";
-import { Pause, Play, X, ExternalLink } from "lucide-react";
+import { Pause, Play, X, ExternalLink, ArrowUpRight } from "lucide-react";
+
+interface Rect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+interface ModalState {
+  video: ReformistSlide;
+  phase: "opening" | "open" | "closing";
+  from: Rect;
+  to: Rect;
+}
+
+const MORPH_MS = 540;
+const MORPH_EASE = "cubic-bezier(0.32, 0.72, 0, 1)";
 
 interface ReformistSlide {
   id: number;
@@ -55,7 +72,63 @@ export default function ReformistSlider() {
   const [windowWidth, setWindowWidth] = useState(1200);
   const progressRef = useRef(0);
   const [progressPercent, setProgressPercent] = useState(0);
-  const [activeModalVideo, setActiveModalVideo] = useState<ReformistSlide | null>(null);
+  const [modal, setModal] = useState<ModalState | null>(null);
+  const [morphed, setMorphed] = useState(false);
+
+  const openModal = useCallback((video: ReformistSlide, el: HTMLElement) => {
+    const r = el.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    let w = Math.min(vw * 0.92, 1080);
+    let h = (w * 9) / 16;
+    if (h > vh * 0.7) {
+      h = vh * 0.7;
+      w = (h * 16) / 9;
+    }
+    const captionH = 110;
+    const to: Rect = {
+      x: (vw - w) / 2,
+      y: Math.max(24, (vh - h - captionH) / 2),
+      w,
+      h,
+    };
+    setMorphed(false);
+    setModal({
+      video,
+      phase: "opening",
+      from: { x: r.left, y: r.top, w: r.width, h: r.height },
+      to,
+    });
+  }, []);
+
+  const closeModal = useCallback(() => {
+    setModal((m) => (m ? { ...m, phase: "closing" } : m));
+  }, []);
+
+  // Drive the FLIP morph: opening → interpolate to target; closing → interpolate back
+  useEffect(() => {
+    if (!modal) return;
+    if (modal.phase === "opening") {
+      const raf = requestAnimationFrame(() => {
+        requestAnimationFrame(() => setMorphed(true));
+      });
+      const t = window.setTimeout(() => {
+        setModal((m) => (m && m.phase === "opening" ? { ...m, phase: "open" } : m));
+      }, MORPH_MS + 40);
+      return () => {
+        cancelAnimationFrame(raf);
+        window.clearTimeout(t);
+      };
+    }
+    if (modal.phase === "closing") {
+      const raf = requestAnimationFrame(() => setMorphed(false));
+      const t = window.setTimeout(() => setModal(null), MORPH_MS + 40);
+      return () => {
+        cancelAnimationFrame(raf);
+        window.clearTimeout(t);
+      };
+    }
+  }, [modal]);
 
   // Measure window width for dynamic carousel peeking calculation
   useEffect(() => {
@@ -67,11 +140,11 @@ export default function ReformistSlider() {
 
   // Handle ESC key and body scroll locking for the video modal
   useEffect(() => {
-    if (!activeModalVideo) return;
+    if (!modal) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        setActiveModalVideo(null);
+        closeModal();
       }
     };
 
@@ -83,7 +156,7 @@ export default function ReformistSlider() {
       document.body.style.overflow = originalOverflow;
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [activeModalVideo]);
+  }, [modal, closeModal]);
 
   const nextSlide = useCallback(() => {
     setCurrentIndex((prev) => (prev + 1) % REFORMIST_VIDEOS.length);
@@ -99,7 +172,7 @@ export default function ReformistSlider() {
 
   // Autoplay timer with progress ring animation (paused when modal is open)
   useEffect(() => {
-    if (!isPlaying || activeModalVideo !== null) return;
+    if (!isPlaying || modal !== null) return;
 
     const intervalTime = 50;
     const step = (intervalTime / AUTOPLAY_DURATION) * 100;
@@ -114,7 +187,7 @@ export default function ReformistSlider() {
     }, intervalTime);
 
     return () => clearInterval(timer);
-  }, [isPlaying, activeModalVideo, nextSlide]);
+  }, [isPlaying, modal, nextSlide]);
 
   // Card dimensions & track offset calculation (scaled down slightly for cleaner proportions)
   const isMobile = windowWidth < 640;
@@ -166,10 +239,11 @@ export default function ReformistSlider() {
             return (
               <div
                 key={video.id}
-                onClick={() => {
+                data-card
+                onClick={(e) => {
                   if (isActive) {
-                    // Open YouTube popup modal on active card click
-                    setActiveModalVideo(video);
+                    // Open video with shared-element morph from this card
+                    openModal(video, e.currentTarget as HTMLElement);
                   } else {
                     // Bring card to center
                     setCurrentIndex(index);
@@ -203,7 +277,8 @@ export default function ReformistSlider() {
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      setActiveModalVideo(video);
+                      const card = (e.currentTarget as HTMLElement).closest("[data-card]");
+                      if (card) openModal(video, card as HTMLElement);
                     }}
                     className="inline-flex items-center gap-2 px-4 py-2 sm:px-5 sm:py-2.5 rounded-full bg-black/70 hover:bg-[#f6c194] hover:text-[#18181B] border border-white/25 hover:border-[#f6c194] text-white text-[13px] sm:text-[14px] font-medium font-inter backdrop-blur-md transition-all shadow-lg cursor-pointer group/btn"
                   >
@@ -278,71 +353,98 @@ export default function ReformistSlider() {
         </div>
       </div>
 
-      {/* Modern High-UX YouTube Video Modal Popup */}
-      {activeModalVideo && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label={activeModalVideo.title}
-          onClick={() => setActiveModalVideo(null)}
-          className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 lg:p-10 animate-in fade-in duration-200"
-        >
-          {/* Modal Container */}
+      {/* Shared-element video modal — thumbnail morphs into the player, reverse on close */}
+      {modal && (
+        <div role="dialog" aria-modal="true" aria-label={modal.video.title} className="fixed inset-0 z-50">
+          {/* Backdrop */}
           <div
-            onClick={(e) => e.stopPropagation()}
-            className="relative w-full max-w-4xl bg-[#141414] border border-white/10 rounded-2xl sm:rounded-3xl overflow-hidden shadow-2xl flex flex-col"
+            onClick={closeModal}
+            className={`absolute inset-0 bg-black/85 backdrop-blur-sm transition-opacity duration-500 cursor-zoom-out ${
+              morphed ? "opacity-100" : "opacity-0"
+            }`}
+          />
+
+          {/* Morph layer — starts at the clicked card rect, interpolates to center */}
+          <div
+            className="absolute rounded-xl overflow-hidden bg-black shadow-2xl will-change-transform"
+            style={{
+              left: modal.to.x,
+              top: modal.to.y,
+              width: modal.to.w,
+              height: modal.to.h,
+              transformOrigin: "top left",
+              transform: morphed
+                ? "translate(0px, 0px) scale(1, 1)"
+                : `translate(${modal.from.x - modal.to.x}px, ${modal.from.y - modal.to.y}px) scale(${modal.from.w / modal.to.w}, ${modal.from.h / modal.to.h})`,
+              transition: `transform ${MORPH_MS}ms ${MORPH_EASE}`,
+            }}
           >
-            {/* Modal Header Bar */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-white/10 bg-[#1A1A1A]">
-              <div className="flex items-center gap-2.5 truncate pr-4">
-                <span className="shrink-0 w-2.5 h-2.5 rounded-full bg-[#f6c194]" />
-                <p className="text-[13px] sm:text-[14px] font-medium text-white/90 truncate font-inter">
-                  {activeModalVideo.title}
-                </p>
-              </div>
-
-              <div className="flex items-center gap-3 shrink-0">
-                <a
-                  href={`https://www.youtube.com/watch?v=${activeModalVideo.videoId}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 text-[12px] text-white/70 hover:text-[#f6c194] transition-colors"
-                >
-                  <span className="hidden sm:inline">Buka di YouTube</span>
-                  <ExternalLink className="w-3.5 h-3.5" />
-                </a>
-
-                <button
-                  onClick={() => setActiveModalVideo(null)}
-                  aria-label="Tutup pemutar video"
-                  className="p-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white/80 hover:text-white transition-colors cursor-pointer"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-
-            {/* Responsive 16:9 YouTube Video Player */}
-            <div className="relative w-full aspect-video bg-black">
+            <Image
+              src={modal.video.thumbnail}
+              alt=""
+              fill
+              className={`object-cover transition-opacity duration-300 ${
+                modal.phase === "open" ? "opacity-0" : "opacity-100"
+              }`}
+              sizes="(max-width: 1080px) 92vw, 1080px"
+            />
+            {modal.phase === "open" && (
               <iframe
-                src={`https://www.youtube-nocookie.com/embed/${activeModalVideo.videoId}?autoplay=1&rel=0`}
-                title={activeModalVideo.title}
+                src={`https://www.youtube-nocookie.com/embed/${modal.video.videoId}?autoplay=1&rel=0`}
+                title={modal.video.title}
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                 allowFullScreen
-                className="absolute inset-0 w-full h-full border-0"
+                className="absolute inset-0 w-full h-full border-0 animate-in fade-in duration-300"
               />
-            </div>
+            )}
+          </div>
 
-            {/* Modal Footer with Video Details */}
-            <div className="p-5 sm:p-6 bg-[#141414] border-t border-white/5 space-y-1.5">
-              <p className="text-[12px] font-medium text-[#f6c194] uppercase tracking-wide">
-                {activeModalVideo.speaker}
-              </p>
-              <p className="text-[13.5px] sm:text-[14px] text-white/80 leading-relaxed font-inter">
-                {activeModalVideo.summary}
-              </p>
+          {/* Caption — appears only after the morph settles */}
+          <div
+            className="absolute transition-all duration-500"
+            style={{
+              left: modal.to.x,
+              top: modal.to.y + modal.to.h + 20,
+              width: modal.to.w,
+              opacity: modal.phase === "open" ? 1 : 0,
+              transform: modal.phase === "open" ? "translateY(0px)" : "translateY(12px)",
+              pointerEvents: modal.phase === "open" ? "auto" : "none",
+            }}
+          >
+            <div className="flex items-start justify-between gap-6">
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#f6c194] font-inter">
+                  {modal.video.speaker}
+                </p>
+                <p className="mt-2 text-[15px] font-semibold leading-[21px] text-white font-inter">
+                  {modal.video.title}
+                </p>
+                <p className="mt-1.5 text-[13px] leading-[19px] text-white/55 font-inter max-w-[620px]">
+                  {modal.video.summary}
+                </p>
+              </div>
+              <a
+                href={`https://www.youtube.com/watch?v=${modal.video.videoId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="shrink-0 inline-flex items-center gap-1.5 text-[13px] font-medium text-white/70 hover:text-white transition-colors font-inter"
+              >
+                Buka di YouTube
+                <ArrowUpRight className="w-3.5 h-3.5" />
+              </a>
             </div>
           </div>
+
+          {/* Floating close — outside the video, minimal */}
+          <button
+            onClick={closeModal}
+            aria-label="Tutup pemutar video"
+            className={`absolute top-5 right-5 w-10 h-10 rounded-full border border-white/15 bg-white/5 hover:bg-white/15 flex items-center justify-center text-white/80 hover:text-white transition-all duration-300 cursor-pointer ${
+              morphed ? "opacity-100" : "opacity-0"
+            }`}
+          >
+            <X className="w-4.5 h-4.5" />
+          </button>
         </div>
       )}
     </section>
