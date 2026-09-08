@@ -1,12 +1,14 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useState, useEffect } from "react";
-import { Share2, Flag, Layers, BookOpen } from "lucide-react";
+import { Share2, Flag, Layers, BookOpen, ArrowUpRight } from "lucide-react";
 import HeroShaderSlideshow from "@/components/HeroShaderSlideshow";
 import PartnerLogos from "@/components/PartnerLogos";
 import CountUpNumber from "@/components/CountUpNumber";
 import GrowDivider from "@/components/GrowDivider";
+import Reveal from "@/components/Reveal";
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import ReformistSlider from "@/components/ReformistSlider";
@@ -59,7 +61,7 @@ export default function HomePage() {
             {/* ----------------------------------------------------- */}
             <div className="flex flex-col justify-end pb-8 sm:pb-12 pr-6 lg:border-r border-[#E5E7EB] min-h-[220px] lg:min-h-auto">
               <p className="font-inter text-[15px] sm:text-[16px] font-normal text-[#151515] max-w-[210px] leading-snug">
-                Moving complex policy challenges forward
+                Politically feasible, technically sound.
               </p>
             </div>
 
@@ -69,7 +71,7 @@ export default function HomePage() {
             <div className="bg-white flex flex-col justify-between px-6 sm:px-10 py-8 sm:py-12 lg:border-r border-[#E5E7EB] z-10 min-h-[360px] lg:min-h-auto shadow-xs">
               {/* Top Half */}
               <div className="space-y-3 pt-2 sm:pt-6">
-                <h1 className="font-iowan text-[26px] sm:text-[30px] lg:text-[32px] text-[#151515] font-normal leading-[120%] tracking-tight">
+                <h1 className="font-iowan text-[28px] sm:text-[34px] lg:text-[34px] text-[#151515] font-normal leading-[120%] tracking-tight">
                   What&apos;s the next policy challenge you&apos;re trying to solve?
                 </h1>
                 <p className="font-inter text-[13.5px] sm:text-[14px] text-[#52525B] leading-[21px]">
@@ -77,13 +79,13 @@ export default function HomePage() {
                 </p>
               </div>
 
-              {/* Bottom Half: 36% Stat */}
+              {/* Bottom Half: Clients Stat */}
               <div className="space-y-3 pb-2 pt-6 border-t border-[#E5E7EB]">
                 <span className="font-iowan text-[32px] sm:text-[36px] text-[#151515] font-normal leading-none block">
-                  36%
+                  +100
                 </span>
                 <p className="font-inter text-[13px] sm:text-[13.5px] text-[#52525B] leading-[19px]">
-                  Evidence, relationships, capabilities, and momentum for lasting impact.
+                  Clients and partners across government, civil society, philanthropy, and media.
                 </p>
               </div>
             </div>
@@ -92,16 +94,118 @@ export default function HomePage() {
             {/* Column 3 (Right 1/3) - Right Side Overlay            */}
             {/* ----------------------------------------------------- */}
             <div className="flex flex-col justify-end pb-8 sm:pb-12 pl-6 sm:pl-10 min-h-[220px] lg:min-h-auto">
-              {/* Bottom Right: 12% Stat */}
+              {/* Bottom Right: EST 2021 */}
               <div className="space-y-3 pb-2">
                 <span className="font-iowan text-[32px] sm:text-[36px] text-[#151515] font-normal leading-none block">
-                  12%
+                  EST 2021
                 </span>
                 <p className="font-inter text-[13px] sm:text-[13.5px] text-[#52525B] leading-[19px] max-w-[270px]">
-                  Working across institutions and sectors to make change possible.
+                  Independent. Nonpartisan.
                 </p>
               </div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ========================================================= */}
+      {/* SECTION: USE CASES (Bento: heading left, cards right)    */}
+      {/* ========================================================= */}
+      <section className="w-full max-w-[1280px] mx-auto px-6 sm:px-10 lg:px-12 py-16 sm:py-24 border-b border-[#E5E7EB]">
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_2fr] gap-12">
+          {/* Left: kicker + heading */}
+          <Reveal>
+            <div className="space-y-3">
+              <span className="text-[11px] font-extrabold uppercase tracking-[1.08px] text-[#6B7280] font-manrope block">
+                Use Cases
+              </span>
+              <h2 className="font-iowan text-[28px] sm:text-[34px] text-[#151515] font-normal leading-[120%] max-w-[320px]">
+                Where the practice proves itself.
+              </h2>
+            </div>
+          </Reveal>
+
+          {/* Right: bento cards, 4px gaps */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
+            {[
+              {
+                href: "/use-case/c40",
+                tag: "Climate Governance",
+                title:
+                  "Building a more inclusive climate governance that works for everyone in Jakarta",
+                image: "/c40/c40-photo1.png",
+                featured: true,
+              },
+              {
+                href: "/use-case/citizens-assembly",
+                tag: "Civic Engagement",
+                title:
+                  "Mending Runding gathered Jakarta's diverse citizens to deliberate and shape the policy directly affecting their lives",
+                image: "/ca/ca-foto-utama.png",
+                featured: false,
+              },
+              {
+                href: "/use-case/reformist",
+                tag: "(Un)learning",
+                title:
+                  "The Reformist Bootcamp: Why unlearning is the first step to take by the next generation of policy professionals",
+                image: "/reformist/reformist-foto-utama.png",
+                featured: false,
+              },
+            ].map((useCase, index) => (
+              <Reveal
+                key={useCase.href}
+                delay={index * 120}
+                className={useCase.featured ? "sm:col-span-2" : ""}
+              >
+                <Link
+                  href={useCase.href}
+                  className={`group relative block overflow-hidden rounded-xl bg-[#F4F5F3] ${
+                    useCase.featured
+                      ? "aspect-[4/3] sm:aspect-[2/1]"
+                      : "aspect-[4/3]"
+                  }`}
+                >
+                  <Image
+                    src={useCase.image}
+                    alt={useCase.title}
+                    fill
+                    sizes={
+                      useCase.featured
+                        ? "(min-width: 1024px) 60vw, 100vw"
+                        : "(min-width: 1024px) 30vw, (min-width: 640px) 50vw, 100vw"
+                    }
+                    className="object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+                  />
+                  {/* Progressive blur — 2 layers, desktop only (backdrop-blur is costly) */}
+                  <div className="absolute inset-x-0 bottom-0 h-[55%] pointer-events-none hidden lg:block">
+                    <div className="absolute inset-0 backdrop-blur-[6px] [mask-image:linear-gradient(to_bottom,transparent_0%,black_60%)]" />
+                    <div className="absolute inset-0 backdrop-blur-[18px] [mask-image:linear-gradient(to_bottom,transparent_45%,black_100%)]" />
+                  </div>
+                  {/* Subtle darkening for text contrast */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/10 to-transparent" />
+                  {/* Arrow */}
+                  <ArrowUpRight
+                    size={18}
+                    strokeWidth={2}
+                    className="absolute top-4 right-4 text-white/80 transition-all duration-200 group-hover:text-white group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
+                  />
+                  {/* Overlay text */}
+                  <div className="absolute inset-x-0 bottom-0 p-5">
+                    <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-white/70 font-inter">
+                      {useCase.tag}
+                    </span>
+                    <h3
+                      className={`mt-2 font-medium leading-[21px] text-white font-inter line-clamp-2 ${
+                        useCase.featured ? "text-[16px] max-w-[520px]" : "text-[14px]"
+                      }`}
+                    >
+                      {useCase.title}
+                    </h3>
+                  </div>
+                </Link>
+              </Reveal>
+            ))}
           </div>
         </div>
       </section>
@@ -144,9 +248,11 @@ export default function HomePage() {
               description: "Creating shared understanding around complex issues through narratives.",
             },
           ].map((pillar, index) => (
-            <div
+            <Reveal
               key={pillar.title}
-              className="relative h-[230px] p-6 flex flex-col justify-between items-start"
+              delay={index * 120}
+              blur
+              className="relative h-[230px]"
             >
               {index > 0 && (
                 <GrowDivider
@@ -154,14 +260,16 @@ export default function HomePage() {
                   delay={index * 150}
                 />
               )}
-              <pillar.icon className="w-6 h-6 stroke-[1.5] text-[#18181B]" />
-              <h3 className="text-[16px] font-semibold text-[#18181B] font-inter">
-                {pillar.title}
-              </h3>
-              <p className="text-[13.5px] sm:text-[14px] text-[#52525B] leading-[21px] font-inter">
-                {pillar.description}
-              </p>
-            </div>
+              <div className="h-full p-6 flex flex-col justify-between items-start">
+                <pillar.icon className="w-6 h-6 stroke-[1.5] text-[#18181B]" />
+                <h3 className="text-[16px] font-semibold text-[#18181B] font-inter">
+                  {pillar.title}
+                </h3>
+                <p className="text-[13.5px] sm:text-[14px] text-[#52525B] leading-[21px] font-inter">
+                  {pillar.description}
+                </p>
+              </div>
+            </Reveal>
           ))}
         </div>
       </section>
@@ -171,7 +279,7 @@ export default function HomePage() {
       {/* ========================================================= */}
       <section className="w-full border-t border-[#E5E7EB] bg-white py-16 sm:py-24">
         <div className="w-full max-w-[1280px] mx-auto px-6 sm:px-10 lg:px-12">
-          <h2 className="font-iowan text-[28px] sm:text-[34px] lg:text-[36px] text-[#151515] font-normal text-center leading-[120%] tracking-tight mb-12 sm:mb-16">
+          <h2 className="font-iowan text-[28px] sm:text-[34px] lg:text-[34px] text-[#151515] font-normal text-center leading-[120%] tracking-tight mb-12 sm:mb-16">
             Trusted by the public policy ecosystem
           </h2>
           <PartnerLogos />
@@ -188,7 +296,7 @@ export default function HomePage() {
             <span className="text-[13px] sm:text-[14px] text-[#A8A29E] font-inter block font-normal tracking-wide">
               Our Impact in 2025
             </span>
-            <h2 className="font-iowan text-[32px] sm:text-[40px] lg:text-[44px] text-white font-normal leading-[120%] tracking-tight">
+            <h2 className="font-iowan text-[28px] sm:text-[34px] lg:text-[34px] text-white font-normal leading-[120%] tracking-tight">
               100x Scaling up our impact sustainably
             </h2>
           </div>
@@ -217,7 +325,7 @@ export default function HomePage() {
                     value={8}
                     suffix="M"
                     delay={0}
-                    className="font-iowan text-[44px] sm:text-[50px] lg:text-[54px] text-white font-normal leading-none block tracking-tight"
+                    className="font-iowan text-[40px] sm:text-[44px] lg:text-[48px] text-white font-normal leading-none block tracking-tight"
                   />
                 </div>
 
@@ -250,7 +358,7 @@ export default function HomePage() {
                   <CountUpNumber
                     value={372}
                     delay={150}
-                    className="font-iowan text-[44px] sm:text-[50px] lg:text-[54px] text-white font-normal leading-none block tracking-tight"
+                    className="font-iowan text-[40px] sm:text-[44px] lg:text-[48px] text-white font-normal leading-none block tracking-tight"
                   />
                 </div>
 
@@ -285,7 +393,7 @@ export default function HomePage() {
                     decimals={1}
                     suffix="M"
                     delay={300}
-                    className="font-iowan text-[44px] sm:text-[50px] lg:text-[54px] text-white font-normal leading-none block tracking-tight"
+                    className="font-iowan text-[40px] sm:text-[44px] lg:text-[48px] text-white font-normal leading-none block tracking-tight"
                   />
                 </div>
 
@@ -320,7 +428,7 @@ export default function HomePage() {
                     decimals={1}
                     suffix="/10"
                     delay={450}
-                    className="font-iowan text-[44px] sm:text-[50px] lg:text-[54px] text-white font-normal leading-none block tracking-tight"
+                    className="font-iowan text-[40px] sm:text-[44px] lg:text-[48px] text-white font-normal leading-none block tracking-tight"
                   />
                 </div>
 

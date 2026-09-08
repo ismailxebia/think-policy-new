@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
 import { X } from "lucide-react";
+import Button from "@/components/Button";
 
 export default function SiteHeader() {
   const [showBanner, setShowBanner] = useState(true);
@@ -53,20 +54,14 @@ export default function SiteHeader() {
           </div>
 
           {/* Right: Portfolio, Join Us */}
-          <div className="flex items-center gap-[12px]">
-            <Link
-              href="/use-case/c40"
-              className="px-3.5 py-1.5 rounded-md border border-[#E5E7EB] text-xs font-semibold text-[#18181B] hover:bg-[#F9FAFB] transition-colors"
-            >
+          <div className="flex items-center gap-2.5">
+            <Button variant="secondary" size="sm" href="/use-case/c40">
               Portfolio
-            </Link>
+            </Button>
 
-            <Link
-              href="/join"
-              className="px-3.5 py-1.5 rounded-md bg-[#18181B] text-white text-xs font-semibold hover:bg-black transition-colors font-manrope"
-            >
+            <Button variant="primary" size="sm" href="/join">
               Join Us
-            </Link>
+            </Button>
           </div>
         </div>
       </header>

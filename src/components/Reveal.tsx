@@ -2,17 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 
-interface GrowDividerProps {
+interface RevealProps {
+  children: React.ReactNode;
   className?: string;
   delay?: number;
-  direction?: "vertical" | "horizontal";
+  blur?: boolean;
 }
 
-export default function GrowDivider({
-  className = "",
-  delay = 0,
-  direction = "vertical",
-}: GrowDividerProps) {
+export default function Reveal({ children, className = "", delay = 0, blur = false }: RevealProps) {
   const ref = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
 
@@ -26,27 +23,25 @@ export default function GrowDivider({
           observer.disconnect();
         }
       },
-      { threshold: 0.2 }
+      { threshold: 0.15 }
     );
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
 
-  const origin = direction === "horizontal" ? "origin-left" : "origin-top";
-  const scale = visible
-    ? direction === "horizontal"
-      ? "scale-x-100"
-      : "scale-y-100"
-    : direction === "horizontal"
-      ? "scale-x-0"
-      : "scale-y-0";
+  const state = visible
+    ? "opacity-100 translate-y-0 blur-[0px]"
+    : blur
+      ? "opacity-0 translate-y-6 blur-[10px]"
+      : "opacity-0 translate-y-6";
 
   return (
     <div
       ref={ref}
-      aria-hidden="true"
-      className={`${className} ${origin} ${scale} transition-transform duration-[1200ms] ease-out`}
+      className={`${className} transition-all duration-700 ease-out ${state}`}
       style={{ transitionDelay: `${delay}ms` }}
-    />
+    >
+      {children}
+    </div>
   );
 }

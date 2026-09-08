@@ -116,24 +116,24 @@ export default function ReformistSlider() {
     return () => clearInterval(timer);
   }, [isPlaying, activeModalVideo, nextSlide]);
 
-  // Card dimensions & track offset calculation
+  // Card dimensions & track offset calculation (scaled down slightly for cleaner proportions)
   const isMobile = windowWidth < 640;
   const isTablet = windowWidth < 1024;
   const cardWidth = isMobile
-    ? Math.max(280, windowWidth * 0.86)
+    ? Math.max(270, windowWidth * 0.80)
     : isTablet
-    ? Math.max(520, windowWidth * 0.78)
-    : Math.min(840, windowWidth * 0.65);
+    ? Math.max(460, windowWidth * 0.68)
+    : Math.min(720, windowWidth * 0.52);
   const gap = isMobile ? 16 : 24;
 
   // Track translation placing the active card in the absolute center of the viewport
   const trackOffset = windowWidth / 2 - cardWidth / 2 - currentIndex * (cardWidth + gap);
 
   return (
-    <section className="w-full bg-[#0E0E0E] text-white py-20 sm:py-28 overflow-hidden">
+    <section className="w-full bg-[#0E0E0E] text-white py-20 sm:py-28 overflow-hidden relative">
       {/* Section Header */}
       <div className="w-full max-w-[1280px] mx-auto px-6 sm:px-10 lg:px-12 text-center space-y-3 mb-12 sm:mb-16">
-        <h2 className="font-iowan text-[32px] sm:text-[40px] font-normal leading-[120%] text-white tracking-tight">
+        <h2 className="font-iowan text-[28px] sm:text-[34px] font-normal leading-[120%] text-white tracking-tight">
           The Reformist
         </h2>
         <p className="text-[14px] text-[#9CA3AF] font-inter max-w-[560px] mx-auto leading-relaxed">
@@ -141,8 +141,18 @@ export default function ReformistSlider() {
         </p>
       </div>
 
-      {/* Slider Viewport with Peeked Left/Right Cards */}
-      <div className="relative w-full overflow-hidden select-none py-2">
+      {/* Slider Viewport with Fadeout Masking on Left & Right */}
+      <div className="relative w-full overflow-hidden select-none py-2 [mask-image:linear-gradient(to_right,transparent_0%,black_10%,black_90%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_right,transparent_0%,black_10%,black_90%,transparent_100%)]">
+        {/* Soft Gradient Fallback Overlays for Left & Right Edges */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute left-0 top-0 bottom-0 w-16 sm:w-28 lg:w-36 bg-gradient-to-r from-[#0E0E0E] to-transparent z-20"
+        />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute right-0 top-0 bottom-0 w-16 sm:w-28 lg:w-36 bg-gradient-to-l from-[#0E0E0E] to-transparent z-20"
+        />
+
         <div
           className="flex items-center transition-transform duration-600 ease-[cubic-bezier(0.25,1,0.5,1)] will-change-transform"
           style={{
@@ -168,10 +178,10 @@ export default function ReformistSlider() {
                   }
                 }}
                 style={{ width: `${cardWidth}px` }}
-                className={`group relative shrink-0 rounded-2xl sm:rounded-3xl overflow-hidden aspect-[16/10] sm:aspect-[16/9.5] transition-all duration-500 shadow-2xl ${
+                className={`group relative shrink-0 rounded-2xl sm:rounded-3xl overflow-hidden aspect-[16/9] transition-all duration-500 shadow-2xl ${
                   isActive
                     ? "opacity-100 scale-100 cursor-pointer"
-                    : "opacity-45 hover:opacity-75 scale-[0.97] cursor-pointer"
+                    : "opacity-45 hover:opacity-75 scale-[0.96] cursor-pointer"
                 }`}
               >
                 {/* Real YouTube Video Thumbnail */}
