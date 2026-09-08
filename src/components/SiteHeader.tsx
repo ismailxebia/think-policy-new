@@ -48,12 +48,17 @@ export default function SiteHeader() {
               <Link href="/product" className="hover:text-[#18181B] transition-colors">Product</Link>
               <Link href="/publication" className="hover:text-[#18181B] transition-colors">Publication</Link>
               <Link href="/where-we-work" className="hover:text-[#18181B] transition-colors">Where We Work</Link>
-              <Link href="/reformist" className="inline-flex items-center gap-1.5 hover:text-[#18181B] transition-colors">
+              <a
+                href="https://thinkpolicy.substack.com/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 hover:text-[#18181B] transition-colors"
+              >
                 <span>The Reformist</span>
                 <span className="px-[4px] py-[3px] text-[9.5px] font-bold font-inter tracking-wider uppercase text-[#18181B] bg-[#f6c194] rounded-full leading-none">
                   NEW
                 </span>
-              </Link>
+              </a>
               <Link href="/about-us" className="hover:text-[#18181B] transition-colors">About Us</Link>
             </nav>
           </div>
