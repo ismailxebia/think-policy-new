@@ -47,8 +47,13 @@ export default function SiteHeader() {
             <nav className="hidden md:flex items-center gap-6 text-[13px] font-medium text-[#4B5563]">
               <Link href="/product" className="hover:text-[#18181B] transition-colors">Product</Link>
               <Link href="/publication" className="hover:text-[#18181B] transition-colors">Publication</Link>
-              <Link href="/community" className="hover:text-[#18181B] transition-colors">Community</Link>
-              <Link href="/newsletter" className="hover:text-[#18181B] transition-colors">Newsletter</Link>
+              <Link href="/where-we-work" className="hover:text-[#18181B] transition-colors">Where We Work</Link>
+              <Link href="/reformist" className="inline-flex items-center gap-1.5 hover:text-[#18181B] transition-colors">
+                <span>The Reformist</span>
+                <span className="px-1.5 py-0.5 text-[9.5px] font-bold font-inter tracking-wide uppercase text-[#f6c194] bg-[#f6c194]/15 rounded-full border border-[#f6c194]/30 leading-none">
+                  NEW
+                </span>
+              </Link>
               <Link href="/about-us" className="hover:text-[#18181B] transition-colors">About Us</Link>
             </nav>
           </div>

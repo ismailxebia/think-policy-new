@@ -205,7 +205,7 @@ export default function ReformistSlider() {
                       e.stopPropagation();
                       setActiveModalVideo(video);
                     }}
-                    className="inline-flex items-center gap-2 px-4 py-2 sm:px-5 sm:py-2.5 rounded-full bg-black/70 hover:bg-[#FA6639] border border-white/25 hover:border-[#FA6639] text-white text-[13px] sm:text-[14px] font-medium font-inter backdrop-blur-md transition-all shadow-lg cursor-pointer group/btn"
+                    className="inline-flex items-center gap-2 px-4 py-2 sm:px-5 sm:py-2.5 rounded-full bg-black/70 hover:bg-[#f6c194] hover:text-[#18181B] border border-white/25 hover:border-[#f6c194] text-white text-[13px] sm:text-[14px] font-medium font-inter backdrop-blur-md transition-all shadow-lg cursor-pointer group/btn"
                   >
                     <span>Tonton Video</span>
                     <ExternalLink className="w-3.5 h-3.5 opacity-80 group-hover/btn:opacity-100 group-hover/btn:translate-x-0.5 transition-all" />
@@ -236,7 +236,7 @@ export default function ReformistSlider() {
                           cy="24"
                           r="21"
                           fill="none"
-                          stroke="#FA6639"
+                          stroke="#f6c194"
                           strokeWidth="1.5"
                           strokeDasharray={132}
                           strokeDashoffset={132 - (132 * progressPercent) / 100}
@@ -271,7 +271,7 @@ export default function ReformistSlider() {
               }}
               aria-label={`Go to video ${i + 1}`}
               className={`h-1.5 rounded-full transition-all duration-300 cursor-pointer ${
-                i === currentIndex ? "w-8 bg-[#FA6639]" : "w-1.5 bg-white/30 hover:bg-white/60"
+                i === currentIndex ? "w-8 bg-[#f6c194]" : "w-1.5 bg-white/30 hover:bg-white/60"
               }`}
             />
           ))}
@@ -295,7 +295,7 @@ export default function ReformistSlider() {
             {/* Modal Header Bar */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-white/10 bg-[#1A1A1A]">
               <div className="flex items-center gap-2.5 truncate pr-4">
-                <span className="shrink-0 w-2.5 h-2.5 rounded-full bg-[#FA6639]" />
+                <span className="shrink-0 w-2.5 h-2.5 rounded-full bg-[#f6c194]" />
                 <p className="text-[13px] sm:text-[14px] font-medium text-white/90 truncate font-inter">
                   {activeModalVideo.title}
                 </p>
@@ -306,7 +306,7 @@ export default function ReformistSlider() {
                   href={`https://www.youtube.com/watch?v=${activeModalVideo.videoId}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 text-[12px] text-white/70 hover:text-[#FA6639] transition-colors"
+                  className="inline-flex items-center gap-1.5 text-[12px] text-white/70 hover:text-[#f6c194] transition-colors"
                 >
                   <span className="hidden sm:inline">Buka di YouTube</span>
                   <ExternalLink className="w-3.5 h-3.5" />
@@ -335,7 +335,7 @@ export default function ReformistSlider() {
 
             {/* Modal Footer with Video Details */}
             <div className="p-5 sm:p-6 bg-[#141414] border-t border-white/5 space-y-1.5">
-              <p className="text-[12px] font-medium text-[#FA6639] uppercase tracking-wide">
+              <p className="text-[12px] font-medium text-[#f6c194] uppercase tracking-wide">
                 {activeModalVideo.speaker}
               </p>
               <p className="text-[13.5px] sm:text-[14px] text-white/80 leading-relaxed font-inter">

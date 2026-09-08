@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useEffect, useRef } from "react";
+import TypewriterWord from "@/components/TypewriterWord";
 
 function ColumnLabel({ children }: { children: React.ReactNode }) {
   return (
@@ -116,7 +117,11 @@ export default function SiteFooter() {
         {/* -------------------------------------------------- */}
         <div className="flex-1 flex flex-col items-start justify-center text-left py-16">
           <h2 className="font-iowan text-[32px] sm:text-[40px] lg:text-[48px] font-normal leading-[1.1] text-white">
-            Ready to create impact?
+            Ready to create{" "}
+            <TypewriterWord
+              words={["impact", "solutions", "opportunities", "change"]}
+            />
+            ?
           </h2>
           <a
             href="mailto:hello@thinkpolicy.id"
