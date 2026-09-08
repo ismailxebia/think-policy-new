@@ -72,10 +72,10 @@ export default function HomePage() {
               {/* Top Half */}
               <div className="space-y-3 pt-2 sm:pt-6">
                 <h1 className="font-iowan text-[28px] sm:text-[34px] lg:text-[34px] text-[#151515] font-normal leading-[120%] tracking-tight">
-                  What&apos;s the next policy challenge you&apos;re trying to solve?
+                  The advisory that puts society first.
                 </h1>
                 <p className="font-inter text-[13.5px] sm:text-[14px] text-[#52525B] leading-[21px]">
-                  The hard ones never fit neatly into a single sector, institution, or mandate.
+                  We reveal hidden patterns and make policy breakthroughs possible.
                 </p>
               </div>
 
