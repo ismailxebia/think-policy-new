@@ -1,178 +1,83 @@
-import React from "react";
+import Image from "next/image";
 
-interface LogoItemProps {
-  name: string;
-  icon?: React.ReactNode;
-  customRender?: React.ReactNode;
+interface LogoItem {
+  src: string;
+  alt: string;
+  w: number;
+  h: number;
+}
+
+// Real partner logos pulled from thinkpolicy.id ("Trusted by the public policy ecosystem")
+const PARTNERS: LogoItem[] = [
+  { src: "/partners/tular-nalar.png", alt: "Tular Nalar", w: 460, h: 304 },
+  { src: "/partners/knowledge-sector-initiative.png", alt: "Knowledge Sector Initiative", w: 1020, h: 396 },
+  { src: "/partners/karsa-city-lab.png", alt: "Karsa City Lab", w: 436, h: 436 },
+  { src: "/partners/commslab.png", alt: "CommsLab", w: 968, h: 236 },
+  { src: "/partners/bbbc.png", alt: "BBBC", w: 580, h: 380 },
+  { src: "/partners/climate-imperative.png", alt: "Climate Imperative", w: 532, h: 356 },
+  { src: "/partners/bicara-udara.png", alt: "Bicara Udara", w: 356, h: 304 },
+  { src: "/partners/mindworks.png", alt: "Mindworks", w: 1072, h: 388 },
+  { src: "/partners/unesco.png", alt: "UNESCO", w: 1828, h: 460 },
+  { src: "/partners/monash-university.webp", alt: "Monash University", w: 892, h: 272 },
+  { src: "/partners/instellar-impact.png", alt: "Instellar Impact", w: 1984, h: 880 },
+  { src: "/partners/ideafest.png", alt: "IdeaFest", w: 1304, h: 468 },
+  { src: "/partners/goto.png", alt: "Goto", w: 656, h: 272 },
+  { src: "/partners/new-energy-nexus.webp", alt: "New Energy Nexus Indonesia", w: 266, h: 248 },
+  { src: "/partners/who.webp", alt: "World Health Organization", w: 629, h: 192 },
+  { src: "/partners/publish-what-you-pay.webp", alt: "Publish What You Pay", w: 642, h: 192 },
+  { src: "/partners/ojk.webp", alt: "Otoritas Jasa Keuangan", w: 444, h: 192 },
+  { src: "/partners/jsc.webp", alt: "Jakarta Smart City", w: 285, h: 192 },
+  { src: "/partners/greenpeace.webp", alt: "Greenpeace", w: 487, h: 192 },
+  { src: "/partners/data-science-indonesia.webp", alt: "Data Science Indonesia", w: 192, h: 192 },
+  { src: "/partners/partner-lightbulb.webp", alt: "Think Policy partner", w: 199, h: 192 },
+  { src: "/partners/setjen-dpr-ri.webp", alt: "Setjen DPR RI", w: 200, h: 192 },
+  { src: "/partners/wri-indonesia.webp", alt: "WRI Indonesia", w: 982, h: 192 },
+  { src: "/partners/pln.webp", alt: "PLN", w: 537, h: 192 },
+  { src: "/partners/indonesian-youth-diplomacy.webp", alt: "Indonesian Youth Diplomacy", w: 442, h: 192 },
+  { src: "/partners/ideafest-2023.webp", alt: "IdeaFest 2023", w: 191, h: 192 },
+  { src: "/partners/google.webp", alt: "Google", w: 565, h: 192 },
+  { src: "/partners/development-dialogue-asia.webp", alt: "Development Dialogue Asia", w: 344, h: 192 },
+  { src: "/partners/british-council.webp", alt: "British Council", w: 670, h: 192 },
+];
+
+function LogoItems({ logos, keyPrefix }: { logos: LogoItem[]; keyPrefix: string }) {
+  // Rendered twice so the -50% translateX loop is seamless
+  const doubled = [...logos, ...logos];
+  return (
+    <>
+      {doubled.map((logo, index) => (
+        <Image
+          key={`${keyPrefix}-${index}`}
+          src={logo.src}
+          alt={index < logos.length ? logo.alt : ""}
+          aria-hidden={index >= logos.length}
+          width={logo.w}
+          height={logo.h}
+          className="h-7 sm:h-8 w-auto shrink-0 object-contain grayscale opacity-60 hover:grayscale-0 hover:opacity-100 transition duration-300"
+        />
+      ))}
+    </>
+  );
 }
 
 export default function PartnerLogos() {
+  const half = Math.ceil(PARTNERS.length / 2);
+  const rowTop = PARTNERS.slice(0, half);
+  const rowBottom = PARTNERS.slice(half);
+
   return (
-    <div className="w-full max-w-[1180px] mx-auto">
-      {/* Row 1 */}
-      <div className="flex flex-wrap items-center justify-center gap-x-10 sm:gap-x-14 md:gap-x-16 gap-y-7 mb-7 text-[#71717A]">
-        {/* Runlayer */}
-        <div className="flex items-center gap-2 text-[#71717A] hover:text-[#18181B] transition-colors duration-200">
-          <svg className="w-4 h-4 fill-current shrink-0" viewBox="0 0 24 24">
-            <path d="M12 0L14 9L23 7L16 13L21 21L12 16L3 21L8 13L1 7L10 9L12 0Z" />
-          </svg>
-          <span className="font-semibold text-[15px] tracking-tight">Runlayer</span>
-        </div>
-
-        {/* Omnea */}
-        <div className="flex items-center gap-2 text-[#71717A] hover:text-[#18181B] transition-colors duration-200">
-          <svg className="w-4 h-4 stroke-current fill-none stroke-2 shrink-0" viewBox="0 0 24 24">
-            <path d="M4 12c0-4.4 3.6-8 8-8s8 3.6 8 8-3.6 8-8 8" strokeLinecap="round" />
-            <path d="M12 8c-2.2 0-4 1.8-4 4s1.8 4 4 4 4-1.8 4-4" strokeLinecap="round" />
-          </svg>
-          <span className="font-semibold text-[15px] tracking-tight">Omnea</span>
-        </div>
-
-        {/* Rho */}
-        <div className="flex items-center text-[#71717A] hover:text-[#18181B] transition-colors duration-200">
-          <span className="font-serif font-bold text-[19px] tracking-tight italic pr-0.5">Rho</span>
-        </div>
-
-        {/* Antimetal */}
-        <div className="flex items-center gap-2 text-[#71717A] hover:text-[#18181B] transition-colors duration-200">
-          <svg className="w-4 h-4 fill-current shrink-0" viewBox="0 0 24 24">
-            <circle cx="12" cy="4" r="2.5" />
-            <circle cx="5" cy="16" r="2.5" />
-            <circle cx="19" cy="16" r="2.5" />
-            <circle cx="12" cy="13" r="2.5" />
-          </svg>
-          <span className="font-medium text-[15px] tracking-tight">Antimetal</span>
-        </div>
-
-        {/* AgentMail */}
-        <div className="flex items-center gap-2 text-[#71717A] hover:text-[#18181B] transition-colors duration-200">
-          <svg className="w-4 h-4 fill-current shrink-0" viewBox="0 0 24 24">
-            <path d="M2 6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6zm3.5 1.5l6.5 4.875 6.5-4.875H5.5zm14.5 1.5l-8 6-8-6V18h16V9z" />
-          </svg>
-          <span className="font-semibold text-[15px] tracking-tight">AgentMail</span>
-        </div>
-
-        {/* Finch */}
-        <div className="flex items-center gap-2 text-[#71717A] hover:text-[#18181B] transition-colors duration-200">
-          <svg className="w-4 h-4 fill-current shrink-0" viewBox="0 0 24 24">
-            <path d="M21.5 6.5c-2 .5-4 0-5.5-.5-1.5 2-4.5 3.5-7.5 3-1.5-.2-2.8-.8-3.5-1.5C3.5 10 3 13 4 16c1.5 4.5 6 6.5 10.5 5 4.5-1.5 7-5.5 7-14.5z" />
-          </svg>
-          <span className="font-semibold text-[15px] tracking-tight">Finch</span>
-        </div>
-
-        {/* Warp */}
-        <div className="flex items-center gap-1.5 text-[#71717A] hover:text-[#18181B] transition-colors duration-200">
-          <svg className="w-4 h-4 fill-current shrink-0" viewBox="0 0 24 24">
-            <path d="M12 2v20M2 12h20M4.93 4.93l14.14 14.14M4.93 19.07l14.14-14.14" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-          </svg>
-          <span className="font-bold text-[15px] tracking-tight">warp</span>
+    <div className="w-full space-y-10 [mask-image:linear-gradient(to_right,transparent,black_12%,black_88%,transparent)]">
+      {/* Top row — scrolls left */}
+      <div className="overflow-hidden">
+        <div className="animate-marquee-left flex w-max items-center gap-12 pr-12 sm:gap-16 sm:pr-16">
+          <LogoItems logos={rowTop} keyPrefix="top" />
         </div>
       </div>
 
-      {/* Row 2 */}
-      <div className="flex flex-wrap items-center justify-center gap-x-10 sm:gap-x-14 md:gap-x-16 gap-y-7 mb-7 text-[#71717A]">
-        {/* David AI */}
-        <div className="flex items-center gap-1.5 text-[#71717A] hover:text-[#18181B] transition-colors duration-200">
-          <span className="font-extrabold text-[15px] tracking-tight">David AI</span>
-        </div>
-
-        {/* Affiniti */}
-        <div className="flex items-center gap-2 text-[#71717A] hover:text-[#18181B] transition-colors duration-200">
-          <div className="w-4 h-4 rounded-xs border border-current flex items-center justify-center overflow-hidden">
-            <div className="w-5 h-0.5 bg-current rotate-45" />
-          </div>
-          <span className="font-semibold text-[15px] tracking-tight">Affiniti</span>
-        </div>
-
-        {/* Warp repeated */}
-        <div className="flex items-center gap-1.5 text-[#71717A] hover:text-[#18181B] transition-colors duration-200">
-          <svg className="w-4 h-4 fill-current shrink-0" viewBox="0 0 24 24">
-            <path d="M12 2v20M2 12h20M4.93 4.93l14.14 14.14M4.93 19.07l14.14-14.14" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-          </svg>
-          <span className="font-bold text-[15px] tracking-tight">warp</span>
-        </div>
-
-        {/* Endex */}
-        <div className="flex items-center gap-2 text-[#71717A] hover:text-[#18181B] transition-colors duration-200">
-          <svg className="w-4 h-4 fill-current shrink-0" viewBox="0 0 24 24">
-            <rect x="2" y="2" width="8" height="8" rx="1.5" />
-            <rect x="14" y="2" width="8" height="8" rx="1.5" />
-            <rect x="2" y="14" width="8" height="8" rx="1.5" />
-            <rect x="14" y="14" width="8" height="8" rx="1.5" />
-          </svg>
-          <span className="font-semibold text-[15px] tracking-tight">Endex</span>
-        </div>
-
-        {/* Liquid */}
-        <div className="flex items-center gap-1.5 text-[#71717A] hover:text-[#18181B] transition-colors duration-200">
-          <svg className="w-3.5 h-4 fill-current shrink-0" viewBox="0 0 24 24">
-            <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" />
-          </svg>
-          <span className="font-bold text-[15px] tracking-tight">Liquid</span>
-        </div>
-
-        {/* Liquid */}
-        <div className="flex items-center gap-1.5 text-[#71717A] hover:text-[#18181B] transition-colors duration-200">
-          <svg className="w-3.5 h-4 fill-current shrink-0" viewBox="0 0 24 24">
-            <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" />
-          </svg>
-          <span className="font-bold text-[15px] tracking-tight">Liquid</span>
-        </div>
-
-        {/* Default */}
-        <div className="flex items-center gap-1.5 text-[#71717A] hover:text-[#18181B] transition-colors duration-200">
-          <svg className="w-4 h-4 stroke-current fill-none stroke-2 shrink-0" viewBox="0 0 24 24">
-            <rect x="3" y="3" width="18" height="18" rx="3" />
-            <path d="M9 15L15 9M15 9H9M15 9V15" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-          <span className="font-semibold text-[15px] tracking-tight">Default</span>
-        </div>
-      </div>
-
-      {/* Row 3 */}
-      <div className="flex flex-wrap items-center justify-center gap-x-10 sm:gap-x-14 md:gap-x-16 gap-y-7 text-[#71717A]">
-        {/* Conduit Health */}
-        <div className="flex items-center gap-2 text-[#71717A] hover:text-[#18181B] transition-colors duration-200">
-          <svg className="w-4 h-4 stroke-current fill-none stroke-2 shrink-0" viewBox="0 0 24 24">
-            <circle cx="12" cy="12" r="9" strokeDasharray="14 6" />
-          </svg>
-          <span className="font-medium text-[15px] tracking-tight">Conduit Health</span>
-        </div>
-
-        {/* AUCTOR */}
-        <div className="flex items-center text-[#71717A] hover:text-[#18181B] transition-colors duration-200">
-          <span className="font-serif font-black text-[15px] tracking-[2px] uppercase">AUCTOR</span>
-        </div>
-
-        {/* VINESIGHT */}
-        <div className="flex items-center text-[#71717A] hover:text-[#18181B] transition-colors duration-200">
-          <span className="font-sans font-semibold text-[14px] tracking-[2.5px] uppercase">VINESIGHT</span>
-        </div>
-
-        {/* Harmonic */}
-        <div className="flex items-center gap-2 text-[#71717A] hover:text-[#18181B] transition-colors duration-200">
-          <svg className="w-4 h-4 fill-current shrink-0" viewBox="0 0 24 24">
-            <circle cx="8" cy="8" r="3.5" />
-            <circle cx="16" cy="8" r="3.5" />
-            <circle cx="12" cy="16" r="3.5" />
-          </svg>
-          <span className="font-medium text-[15px] tracking-tight">Harmonic</span>
-        </div>
-
-        {/* zingage */}
-        <div className="flex items-center text-[#71717A] hover:text-[#18181B] transition-colors duration-200">
-          <span className="font-sans font-bold text-[16px] tracking-tight lowercase">zingage</span>
-        </div>
-
-        {/* Footprint */}
-        <div className="flex items-center gap-1.5 text-[#71717A] hover:text-[#18181B] transition-colors duration-200">
-          <span className="font-black text-[17px] font-sans">F</span>
-          <span className="font-semibold text-[15px] tracking-tight">Footprint</span>
-        </div>
-
-        {/* hud */}
-        <div className="flex items-center text-[#71717A] hover:text-[#18181B] transition-colors duration-200">
-          <span className="font-serif font-bold text-[17px] tracking-tight lowercase">hud</span>
+      {/* Bottom row — scrolls right */}
+      <div className="overflow-hidden">
+        <div className="animate-marquee-right flex w-max items-center gap-12 pr-12 sm:gap-16 sm:pr-16">
+          <LogoItems logos={rowBottom} keyPrefix="bottom" />
         </div>
       </div>
     </div>
