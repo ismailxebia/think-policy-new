@@ -50,7 +50,7 @@ export default function SiteHeader() {
               <Link href="/where-we-work" className="hover:text-[#18181B] transition-colors">Where We Work</Link>
               <Link href="/reformist" className="inline-flex items-center gap-1.5 hover:text-[#18181B] transition-colors">
                 <span>The Reformist</span>
-                <span className="px-1.5 py-0.5 text-[9.5px] font-bold font-inter tracking-wide uppercase text-[#f6c194] bg-[#f6c194]/15 rounded-full border border-[#f6c194]/30 leading-none">
+                <span className="px-2 py-0.5 text-[9.5px] font-bold font-inter tracking-wider uppercase text-[#18181B] bg-[#f6c194] rounded-full leading-none">
                   NEW
                 </span>
               </Link>
